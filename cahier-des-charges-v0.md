@@ -1,0 +1,113 @@
+# Second cerveau — Cahier des charges v0 (noyau)
+
+## Problème à résoudre
+
+Capture continue de photos, captures d'écran et bookmarks (X, YouTube) sur le téléphone, jamais réorganisés ensuite : ça tombe dans l'oubli.
+
+**Objectif v0** : un rituel quotidien de 5 à 10 minutes, sur ordinateur, qui vide le stock de captures du téléphone sans effort et sans y repenser le reste de la journée.
+
+## Critère de succès de v0 (avant tout le reste)
+
+v0 est considéré comme validé si **tous** les critères suivants sont mesurés vrais sur une fenêtre de 14 jours glissants, via la table `sessions` :
+
+- **≥ 10 sessions de tri** sur les 14 jours (≈ 5/semaine, tolérance à la vraie vie) ;
+- **durée médiane de session ≤ 10 minutes** ;
+- **taille de l'inbox stable ou décroissante** sur la période (pas d'accumulation plus vite qu'on ne trie).
+
+Tant que ce n'est pas vrai, rien d'autre ne doit être construit — voir `cahier-des-charges-v1.md`, qui ne démarre qu'après validation de v0. Chaque session est enregistrée en base (début, fin, nombre d'items triés/archivés/liés) : le critère doit pouvoir être tranché objectivement au jour 14, pas ressenti.
+
+## Hors scope (explicitement exclu de v0 et v1 proche)
+
+- Carte/archipel visuel, îles, simulation de forces → v1 seulement.
+- Mode jeu (pirates, combats, ressources) → non spécifié, à ne considérer que si v0 et v1 tournent et que l'envie persiste. Ne doit jamais bloquer ou compliquer v0/v1.
+- RAG sur corpus lourds (PDF scientifiques, schémas DTU, code) → hors périmètre, expérience passée négative sur ce type de projet (Palais des Connaissances, RAGDungeon, RAGWizard).
+- Détection automatique de liens sans validation humaine → jamais. Le système ne fait que scorer et suggérer, l'utilisateur décide toujours.
+
+## Parcours de capture (Android)
+
+- **Photos / captures d'écran** : application Syncthing (Android), dossiers `DCIM/Screenshots` et `Pictures` synchronisés vers un dossier surveillé sur le serveur. Désactiver l'optimisation de batterie pour l'app afin d'éviter les syncs irréguliers.
+- **Bookmarks X / YouTube** : application "HTTP Shortcuts" (Android), cible de partage personnalisée qui poste l'URL partagée vers un endpoint HTTP du serveur (authentifié par token). Partage natif depuis X/YouTube → choix de la cible dans le menu de partage.
+
+## Traitement à l'ingestion
+
+1. Un watcher (Python, `watchdog`) détecte les nouveaux fichiers dans le dossier surveillé.
+2. **Le watcher COPIE le fichier hors de la zone Syncthing** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier synchronisé : si le téléphone supprime une capture, l'archive serveur doit survivre.
+3. **Déduplication** par hash SHA-256 du fichier (ou de l'URL pour les bookmarks) : un doublon est ignoré silencieusement.
+4. OCR sur les images (`pytesseract` / Tesseract, langue `fra+eng`). Si le texte extrait est trop court (< ~20 caractères), l'item est marqué "photo sans texte" et passe au modèle vision s'il est activé.
+5. Description optionnelle des photos non textuelles via un modèle vision local (Ollama, ex. moondream/llava). **Désactivé par défaut** — option activable sans changement de code.
+6. Pour les bookmarks : récupération du titre via oEmbed quand disponible (YouTube : oui ; X : pas d'oEmbed public fiable → on affiche l'URL brute, pas de promesse de preview au-delà). Pas de scraping lourd en v0.
+7. Embedding du contenu textuel (OCR + description + URL + titre) via un modèle d'embedding Ollama (ex. nomic-embed-text). Si Ollama est indisponible, l'item est ingéré **sans embedding** et reste triable manuellement — la capture ne doit jamais échouer parce qu'un service annexe est down.
+8. **Burst initial toléré** : le traitement (OCR, embedding) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux de 300 fichiers à la première synchro ralentit l'enrichissement, jamais la capture ni le tri.
+
+## Projets
+
+- Table `projects` : `id`, `title`, `description` (courte, optionnelle), `embedding`, `created_at`.
+- L'embedding d'un projet est **la moyenne des embeddings de ses items liés** tant qu'il en a ; sinon celui de `title + description`. Recalculé à chaque lien validé.
+- Création de projet possible à tout moment : à l'ingestion (pas nécessaire), et pendant le tri (action "Créer un projet", avec lien immédiat de l'item courant).
+- Le scoring porte sur la liste des projets existants **au moment de l'affichage** — la création d'un nouveau projet est toujours permise et n'est pas une "découverte ouverte".
+
+## Suggestions de lien
+
+Le mécanisme existe dans le code (similarité cosinus item ↔ projet, seuil configurable), mais :
+
+- **Désactivé au démarrage** (seuil = null). Les liens se font manuellement : "Lier à un projet" via un sélecteur.
+- Le seuil n'est introduit qu'après avoir observé la distribution réelle des scores pendant au moins une semaine d'usage (les scores sont journalisés dans `suggestion_log` pour permettre ce calibrage).
+- Un rejet de suggestion est journalisé et la paire item/projet n'est plus suggérée.
+
+## Tri quotidien
+
+- Interface liste simple (pas de carte en v0), **un item affiché à la fois**, **conçue keyboard-first** :
+  - `A` = archiver (un geste, zéro décision supplémentaire, l'item sort de l'inbox — conservé, pas supprimé)
+  - `1`–`9` = lier au projet n de la liste affichée à l'écran
+  - `C` = créer un nouveau projet et y lier l'item courant
+  - navigation `←`/`→` ou `Espace` pour rejeter visuellement sans décider (l'item reste en inbox)
+  - `S` = rejeter la suggestion affichée (quand les suggestions sont activées)
+- Session **plafonnée à 15 items** par défaut (configurable) pour respecter la fenêtre 5-10 min.
+- Une entrée est créée dans `sessions` à l'ouverture du tri (si de nouveaux items existent) et clôturée automatiquement.
+
+## Boucle de récompense (page projet minimale)
+
+Le tri ne doit pas être qu'une corvée de soustraction. Dès v0 :
+
+- Page **Mes projets** : liste des projets avec nombre d'items liés.
+- Page **projet** : titre, description, liste chronologique des items liés (miniatures pour les images, liens cliquables pour les bookmarks).
+- La page projet affiche le compteur "grandi de N items cette semaine" — la satisfaction minimale avant la carte de v1.
+
+## Stack technique
+
+- **Langage** : Python partout côté serveur (aucune UI riche en v0, donc pas de sujet JS).
+- **API + UI** : FastAPI (endpoint de réception des bookmarks) avec NiceGUI monté dessus — **un seul processus** : API, watcher, enrichissement, tri. Moins de services, moins de choses qui cassent.
+- **Watcher** : `watchdog`, thread dans le même processus (systemd sur le serveur).
+- **OCR** : `pytesseract` (dégradation gracieuse si Tesseract absent).
+- **Vision (option)** : modèle Ollama (moondream/llava), désactivé par défaut.
+- **Embeddings** : modèle d'embedding Ollama (nomic-embed-text) — pas de dépendance PyTorch.
+- **Métadonnées + vecteurs** : **SQLite unique** — les embeddings sont stockés en BLOB dans la table, similarité calculée en numpy (volumétrie personnelle : quelques milliers d'items, un produit matriciel suffit). **Pas de ChromaDB ni de service vectoriel séparé.**
+- **Conteneurisation** : non requise en v0. Un process + systemd (ou équivalent) suffit ; Docker Compose réévalué en v1 si besoin.
+- **Accès distant (téléphone + PC)** : Tailscale, pas d'exposition publique, pas de certificats à gérer.
+- **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie quotidienne simple (cron/rsync) documentée dans le README.
+
+## Schéma de données (SQLite)
+
+Table **items** :
+
+| champ | description |
+|---|---|
+| `id` | identifiant unique |
+| `type` | photo / capture d'écran / bookmark |
+| `source_path` | chemin de la copie archivée dans `data/archives/` |
+| `url` | URL pour les bookmarks |
+| `title` | titre oEmbed si disponible |
+| `ocr_text` | texte extrait |
+| `vision_description` | description du modèle vision si activé |
+| `embedding` | BLOB du vecteur (NULL si enrichissement incomplet) |
+| `sha256` | hash de déduplication (unique) |
+| `created_at` | date de capture |
+| `status` | inbox / archived / linked |
+| `linked_project_id` | projet associé si lié |
+| `ingest_done` | 0 = en attente d'enrichissement, 1 = traité |
+
+Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`.
+
+Table **sessions** : `id`, `started_at`, `ended_at`, `items_reviewed`, `archived`, `linked`, `projects_created`.
+
+Table **suggestion_log** : `item_id`, `project_id`, `score`, `action` (shown / accepted / rejected), `ts` — sert au calibrage du seuil.

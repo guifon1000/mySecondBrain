@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn>=0.32
+nicegui>=2.10
+watchdog>=6.0
+numpy>=2.0
+pillow>=11.0
+pytesseract>=0.3.13
+requests>=2.32
