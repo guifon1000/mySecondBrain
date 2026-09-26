@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .env
 server.log
+# Vault Obsidian — espace d'écriture personnel, hors git
+myVault/
