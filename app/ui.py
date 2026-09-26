@@ -15,6 +15,7 @@ import numpy as np
 from nicegui import app, ui
 
 from . import config, db, enrich
+from .api import ingest_url
 
 log = logging.getLogger("ui")
 
@@ -161,6 +162,27 @@ def tri_page():
 
     header_label = ui.label().classes("text-lg opacity-70")
     card = ui.column().classes("w-full")
+
+    # Capture locale d'un bookmark : champ URL, utilisable à tout moment
+    with ui.row().classes("w-full max-w-3xl mx-auto items-center gap-2"):
+        url_input = ui.input(placeholder="Coller une URL à capturer…").classes("grow")
+
+        async def capture_url():
+            value = url_input.value
+            try:
+                _item_id, status = ingest_url(value)
+            except Exception:
+                ui.notify("URL invalide", type="negative")
+                return
+            url_input.set_value(None)
+            ui.notify(
+                "Capture ajoutée à l'inbox" if status == "ok" else "Déjà en inbox (doublon)",
+                type="positive" if status == "ok" else "info",
+            )
+
+        ui.button("Capturer", on_click=capture_url).props("outline")
+        url_input.on("keydown.enter", capture_url)
+
     with ui.column().classes("w-full max-w-3xl mx-auto p-2 opacity-70 text-sm"):
         ui.markdown(
             "**A** archiver · **1-9** lier · **C** créer projet · "
@@ -301,20 +323,23 @@ def tri_page():
         )
 
     async def on_key(e):
-        if e.action != "keydown" or e.repeat or state["done"]:
+        # KeyEventArguments : e.action.keydown / e.action.repeat, e.key.name /
+        # e.key.number. Les inputs (champ URL, dialog) sont déjà exclus par le
+        # paramètre `ignore` par défaut de ui.keyboard.
+        if not e.action.keydown or e.action.repeat or state["done"]:
             return
         if state["dialog_open"]:
             return
-        key = e.key
-        if key.isdigit() and key != "0":
-            do_link(int(key) - 1)
-        elif key.lower() == "a":
+        num = e.key.number
+        if num is not None and 1 <= num <= 9:
+            do_link(num - 1)
+        elif e.key.name.lower() == "a":
             do_archive()
-        elif key.lower() == "c":
+        elif e.key.name.lower() == "c":
             open_create_dialog()
-        elif key.lower() == "s" and config.SUGGEST_THRESHOLD is not None:
+        elif e.key.name.lower() == "s" and config.SUGGEST_THRESHOLD is not None:
             do_reject_suggestion()
-        elif key in ("ArrowRight", " "):
+        elif e.key.space or e.key.name == "ArrowRight":
             advance()
 
     ui.keyboard(on_key=on_key)

@@ -2,11 +2,13 @@
 
 L'endpoint de réception n'insère qu'une ligne : tout le traitement lourd
 (oEmbed, embedding) part dans la file d'enrichissement.
-Auth par token, via header `X-Ingest-Token` ou champ `token` du body
-(les deux sont acceptés pour s'accommoder d'HTTP Shortcuts).
+Auth : si `SB_INGEST_TOKEN` est défini dans .env, le header `X-Ingest-Token`
+ou le champ `token` du body doit correspondre. Vide (défaut v0 locale) = pas
+d'auth — l'endpoint n'est joignable qu'en local.
 """
 import hashlib
 import logging
+import sqlite3
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -18,29 +20,38 @@ log = logging.getLogger("api")
 app = FastAPI(title="Second cerveau", docs_url=None, redoc_url=None)
 
 
-@app.post("/ingest/bookmark")
-def ingest_bookmark(body: dict, x_ingest_token: str = Header(default="")) -> dict:
-    token = x_ingest_token or str(body.get("token") or "")
-    if token != config.INGEST_TOKEN:
-        raise HTTPException(status_code=401, detail="token invalide")
+def _insert_bookmark(conn: sqlite3.Connection, url: str) -> tuple[int, str]:
+    digest = hashlib.sha256(url.encode()).hexdigest()
+    if conn.execute("SELECT 1 FROM items WHERE sha256 = ?", (digest,)).fetchone():
+        return 0, "duplicate"
+    cur = conn.execute(
+        "INSERT INTO items (type, url, sha256) VALUES ('bookmark', ?, ?)",
+        (url, digest),
+    )
+    return cur.lastrowid, "ok"
 
-    url = (body.get("url") or "").strip()
+
+def ingest_url(url: str) -> tuple[int, str]:
+    """Capture d'un bookmark, partagé entre l'API HTTP et le champ URL de l'UI."""
+    url = (url or "").strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="URL invalide")
-
-    digest = hashlib.sha256(url.encode()).hexdigest()
     with db.db() as conn:
-        if conn.execute("SELECT 1 FROM items WHERE sha256 = ?", (digest,)).fetchone():
-            return {"status": "duplicate"}
-        cur = conn.execute(
-            "INSERT INTO items (type, url, sha256) VALUES ('bookmark', ?, ?)",
-            (url, digest),
-        )
-        item_id = cur.lastrowid
+        item_id, status = _insert_bookmark(conn, url)
+    if status == "ok":
+        enrich.enqueue(item_id)
+        log.info("bookmark ingéré : %s", url)
+    return item_id, status
 
-    enrich.enqueue(item_id)
-    log.info("bookmark ingéré : %s", url)
-    return {"status": "ok", "item_id": item_id}
+
+@app.post("/ingest/bookmark")
+def ingest_bookmark(body: dict, x_ingest_token: str = Header(default="")) -> dict:
+    if config.INGEST_TOKEN:
+        token = x_ingest_token or str(body.get("token") or "")
+        if token != config.INGEST_TOKEN:
+            raise HTTPException(status_code=401, detail="token invalide")
+    item_id, status = ingest_url(str(body.get("url") or ""))
+    return {"status": status, "item_id": item_id}
 
 
 def mount_archives() -> None:

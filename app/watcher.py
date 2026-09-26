@@ -1,9 +1,10 @@
-"""Watcher Syncthing : copie les nouveaux fichiers HORS de la zone synchronisée,
-déduplique par hash, puis met en file d'enrichissement.
+"""Watcher local : surveille les dossiers de captures du PC (Screenshots,
+Pictures...), copie chaque nouvelle image vers l'archive interne, déduplique
+par hash, puis met en file d'enrichissement.
 
-La copie (pas un simple renvoi vers le dossier watched) est une exigence du
-cahier des charges : si le téléphone supprime une capture, l'archive serveur
-doit survivre.
+La copie (pas un simple renvoi vers le dossier source) est une exigence du
+cahier des charges : si l'utilisateur supprime une capture, l'archive doit
+survivre.
 """
 import logging
 import shutil
@@ -20,18 +21,24 @@ log = logging.getLogger("watcher")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".gif"}
 # Syncthing écrit par morceaux et sur Windows l'événement "created" arrive
-# parfois quand le fichier fait encore 0 octet : on attend la stabilité.
+# parfois quand le fichier fait encore 0 octet (idem si un outil de capture
+# écrit lentement) : on attend la stabilité.
 _STABLE_CHECKS = 3   # tours consécutifs à taille inchangée pour considérer stable
 _STABLE_DELAY = 1    # secondes
 _MAX_WAIT = 30       # garde-fou : abandon après 30 s d'instabilité
 
 
-def _classify(ext: str) -> str:
-    return "screenshot" if "screenshot" in ext.parent.name.lower() else "photo"
+def _classify(path: Path) -> str:
+    parent = path.parent.name.lower()
+    return (
+        "screenshot"
+        if any(k in parent for k in ("screenshot", "capture", "écran", "ecran"))
+        else "photo"
+    )
 
 
 def _wait_stable(path: Path) -> bool:
-    """Attend que la taille du fichier cesse de bouger (sync en cours ?).
+    """Attend que la taille du fichier cesse de bouger (écriture en cours ?).
 
     Ne renonce pas au premier changement de taille : un fichier fraîchement
     créé passe par 0 octet avant d'être rempli. La taille doit rester
@@ -65,7 +72,7 @@ def ingest_file(src: Path) -> None:
         if dup:
             log.info("doublon ignoré : %s", src.name)
             return
-        # Copie vers l'archive — hors zone Syncthing, survives les suppressions téléphone
+        # Copie vers l'archive — hors du dossier source, survit aux suppressions
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         dest = config.ARCHIVE_DIR / f"{stamp}{src.suffix.lower()}"
         shutil.copy2(src, dest)
@@ -89,30 +96,27 @@ class Handler(FileSystemEventHandler):
 def start_watcher() -> None:
     config.ensure_dirs()
     observer = Observer()
-    observer.schedule(Handler(), str(config.WATCH_DIR), recursive=True)
+    watched = [d for d in config.WATCH_DIRS if d.is_dir()]
+    for d in watched:
+        observer.schedule(Handler(), str(d), recursive=True)
+        log.info("surveillance de %s", d)
     observer.daemon = True
     observer.start()
-    # Rattrapage : fichiers déjà présents (première synchro, crash, etc.)
+    # Rattrapage : fichiers déjà présents (premier lancement, crash, etc.)
     import threading
 
     threading.Thread(target=_catch_up, daemon=True).start()
-    log.info("surveillance de %s", config.WATCH_DIR)
 
 
 def _catch_up() -> None:
-    known = set()
-    with db.db() as conn:
-        for row in conn.execute("SELECT source_path FROM items"):
-            known.add(row["source_path"])
-    # On re-parse par hash via un chemin temporaire : plus simple de hasher les
-    # fichiers du dossier watched directement.
-    for path in sorted(config.WATCH_DIR.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in IMAGE_EXTS:
+    for watched_dir in config.WATCH_DIRS:
+        if not watched_dir.is_dir():
             continue
-        if str(path) in known:
-            continue
-        digest = enrich.sha256_file(path)
-        with db.db() as conn:
-            if conn.execute("SELECT 1 FROM items WHERE sha256 = ?", (digest,)).fetchone():
+        for path in sorted(watched_dir.rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in IMAGE_EXTS:
                 continue
-        ingest_file(path)
+            digest = enrich.sha256_file(path)
+            with db.db() as conn:
+                if conn.execute("SELECT 1 FROM items WHERE sha256 = ?", (digest,)).fetchone():
+                    continue
+            ingest_file(path)

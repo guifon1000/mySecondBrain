@@ -30,11 +30,70 @@ def _path(name: str, default: str) -> Path:
 # --- Dossiers -------------------------------------------------------------
 DATA_DIR = _path("SB_DATA_DIR", ROOT / "data")
 ARCHIVE_DIR = DATA_DIR / "archives"
-WATCH_DIR = _path("SB_WATCH_DIR", DATA_DIR / "watched")
+
+import sys
+
+
+def _windows_capture_dirs() -> list[Path]:
+    """Dossier de captures d'écran du PC, tel que configuré dans le registre
+    (gère Windows français : « Captures d'écran » sous OneDrive/Pictures).
+
+    On cible le sous-dossier de captures plutôt que Pictures en entier :
+    ce dernier contient souvent la pellicule OneDrive (sauvegarde caméra
+    du téléphone) qu'on ne veut PAS ingérer en v0 locale.
+    """
+    import os
+    import winreg
+
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+    keywords = ("screenshot", "capture", "écran", "ecran")
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+            value, _ = winreg.QueryValueEx(k, "{B7BEDE81-DF94-4682-A7A8-5715B85EDF16}")
+            shots = Path(os.path.expandvars(str(value)))
+            if shots.is_dir():
+                return [shots]
+    except OSError:
+        pass
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+            value, _ = winreg.QueryValueEx(k, "My Pictures")
+            pictures = Path(os.path.expandvars(str(value)))
+    except OSError:
+        return []
+    if not pictures.is_dir():
+        return []
+    # Sous-dossier de captures dans Pictures ? sinon Pictures lui-même
+    for child in sorted(pictures.iterdir()):
+        if child.is_dir() and any(kw in child.name.lower() for kw in keywords):
+            return [child]
+    return [pictures]
+
+
+def _watch_dirs() -> list[Path]:
+    """Dossiers surveillés pour les captures d'images.
+
+    Défaut (v0 locale) : le dossier de captures d'écran du PC (détection
+    registre, gère Windows FR/EN), sinon ./data/watched. Surchargeable via
+    SB_WATCH_DIRS (séparateur « ; »).
+    """
+    raw = os.getenv("SB_WATCH_DIRS", "")
+    if raw:
+        return [Path(p) for p in raw.split(";") if p]
+    if sys.platform.startswith("win"):
+        dirs = _windows_capture_dirs()
+        if dirs:
+            return dirs
+    return [DATA_DIR / "watched"]
+
+
+WATCH_DIRS = _watch_dirs()
 DB_PATH = DATA_DIR / "secondbrain.db"
 
 # --- Sécurité -------------------------------------------------------------
-INGEST_TOKEN = os.getenv("SB_INGEST_TOKEN", "change-me")
+# Token optionnel pour l'endpoint d'ingestion. Vide = pas d'auth (v0 100% locale,
+# endpoint joignable uniquement en local).
+INGEST_TOKEN = os.getenv("SB_INGEST_TOKEN", "")
 
 # --- Réseau ---------------------------------------------------------------
 HOST = os.getenv("SB_HOST", "0.0.0.0")
@@ -60,5 +119,5 @@ SUGGEST_THRESHOLD = (
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, ARCHIVE_DIR, WATCH_DIR):
+    for d in (DATA_DIR, ARCHIVE_DIR, DATA_DIR / "watched"):
         d.mkdir(parents=True, exist_ok=True)

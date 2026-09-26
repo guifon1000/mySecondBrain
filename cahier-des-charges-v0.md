@@ -23,21 +23,33 @@ Tant que ce n'est pas vrai, rien d'autre ne doit être construit — voir `cahie
 - RAG sur corpus lourds (PDF scientifiques, schémas DTU, code) → hors périmètre, expérience passée négative sur ce type de projet (Palais des Connaissances, RAGDungeon, RAGWizard).
 - Détection automatique de liens sans validation humaine → jamais. Le système ne fait que scorer et suggérer, l'utilisateur décide toujours.
 
-## Parcours de capture (Android)
+## Parcours de capture (local)
 
-- **Photos / captures d'écran** : application Syncthing (Android), dossiers `DCIM/Screenshots` et `Pictures` synchronisés vers un dossier surveillé sur le serveur. Désactiver l'optimisation de batterie pour l'app afin d'éviter les syncs irréguliers.
-- **Bookmarks X / YouTube** : application "HTTP Shortcuts" (Android), cible de partage personnalisée qui poste l'URL partagée vers un endpoint HTTP du serveur (authentifié par token). Partage natif depuis X/YouTube → choix de la cible dans le menu de partage.
+Tout tourne sur le PC. Deux canaux de capture :
+
+- **Images (captures d'écran, photos)** : le watcher surveille les dossiers
+  Windows standards (`%USERPROFILE%\Pictures\Screenshots` et `Pictures`,
+  surchargeables via `SB_WATCH_DIRS`). Prendre une capture d'écran suffit :
+  elle arrive dans l'inbox en quelques secondes.
+- **Bookmarks** : champ URL directement dans l'interface de tri (coller,
+  Entrée ou bouton Capturer). Un endpoint HTTP `POST /ingest/bookmark`
+  subsiste pour un usage avancé (bookmarklet, HTTP Shortcuts), authentifié
+  par token si `SB_INGEST_TOKEN` est défini.
+
+La capture mobile (Syncthing, HTTP Shortcuts, Tailscale) est **reportée** :
+le noyau est conçu pour la réactiver plus tard sans refonte, mais elle ne
+doit pas compliquer le démarrage.
 
 ## Traitement à l'ingestion
 
-1. Un watcher (Python, `watchdog`) détecte les nouveaux fichiers dans le dossier surveillé.
-2. **Le watcher COPIE le fichier hors de la zone Syncthing** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier synchronisé : si le téléphone supprime une capture, l'archive serveur doit survivre.
+1. Un watcher (Python, `watchdog`) détecte les nouveaux fichiers dans les dossiers surveillés, et le champ URL / l'endpoint reçoivent les bookmarks.
+2. **Le watcher COPIE le fichier hors du dossier source** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier du dossier source : si l'utilisateur supprime une capture, l'archive doit survivre.
 3. **Déduplication** par hash SHA-256 du fichier (ou de l'URL pour les bookmarks) : un doublon est ignoré silencieusement.
 4. OCR sur les images (`pytesseract` / Tesseract, langue `fra+eng`). Si le texte extrait est trop court (< ~20 caractères), l'item est marqué "photo sans texte" et passe au modèle vision s'il est activé.
 5. Description optionnelle des photos non textuelles via un modèle vision local (Ollama, ex. moondream/llava). **Désactivé par défaut** — option activable sans changement de code.
 6. Pour les bookmarks : récupération du titre via oEmbed quand disponible (YouTube : oui ; X : pas d'oEmbed public fiable → on affiche l'URL brute, pas de promesse de preview au-delà). Pas de scraping lourd en v0.
 7. Embedding du contenu textuel (OCR + description + URL + titre) via un modèle d'embedding Ollama (ex. nomic-embed-text). Si Ollama est indisponible, l'item est ingéré **sans embedding** et reste triable manuellement — la capture ne doit jamais échouer parce qu'un service annexe est down.
-8. **Burst initial toléré** : le traitement (OCR, embedding) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux de 300 fichiers à la première synchro ralentit l'enrichissement, jamais la capture ni le tri.
+8. **Burst initial toléré** : le traitement (OCR, embedding) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux massif au premier lancement (rattrapage des dossiers existants) ralentit l'enrichissement, jamais la capture ni le tri.
 
 ## Projets
 
@@ -77,13 +89,14 @@ Le tri ne doit pas être qu'une corvée de soustraction. Dès v0 :
 
 - **Langage** : Python partout côté serveur (aucune UI riche en v0, donc pas de sujet JS).
 - **API + UI** : FastAPI (endpoint de réception des bookmarks) avec NiceGUI monté dessus — **un seul processus** : API, watcher, enrichissement, tri. Moins de services, moins de choses qui cassent.
-- **Watcher** : `watchdog`, thread dans le même processus (systemd sur le serveur).
+- **Watcher** : `watchdog`, thread dans le même processus.
 - **OCR** : `pytesseract` (dégradation gracieuse si Tesseract absent).
 - **Vision (option)** : modèle Ollama (moondream/llava), désactivé par défaut.
 - **Embeddings** : modèle d'embedding Ollama (nomic-embed-text) — pas de dépendance PyTorch.
 - **Métadonnées + vecteurs** : **SQLite unique** — les embeddings sont stockés en BLOB dans la table, similarité calculée en numpy (volumétrie personnelle : quelques milliers d'items, un produit matriciel suffit). **Pas de ChromaDB ni de service vectoriel séparé.**
-- **Conteneurisation** : non requise en v0. Un process + systemd (ou équivalent) suffit ; Docker Compose réévalué en v1 si besoin.
-- **Accès distant (téléphone + PC)** : Tailscale, pas d'exposition publique, pas de certificats à gérer.
+- **Conteneurisation** : hors scope. Un process local suffit.
+- **Réseau** : tout en local (`127.0.0.1` par défaut). Pas de Tailscale, pas d'exposition, pas de certificats.
+- **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie simple documentée dans le README.
 - **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie quotidienne simple (cron/rsync) documentée dans le README.
 
 ## Schéma de données (SQLite)
