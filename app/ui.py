@@ -15,7 +15,8 @@ import numpy as np
 from nicegui import app, ui
 
 from . import config, db, enrich
-from .api import ingest_url
+from .api import ingest_text, ingest_url
+from . import vault
 
 log = logging.getLogger("ui")
 
@@ -132,6 +133,15 @@ def _create_project_with_item(title: str, description: str, item_id: int,
             (session_id,),
         )
         enrich.recompute_project_embedding(conn, project_id)
+        try:
+            stub = vault.create_project_stub(project_id, title, description)
+            if stub:
+                conn.execute(
+                    "UPDATE projects SET vault_path = ? WHERE id = ?",
+                    (str(stub), project_id),
+                )
+        except Exception:
+            log.exception("stub vault non créé (erreur)")
     return project_id
 
 
@@ -156,6 +166,13 @@ def tri_page():
 
     state = {"index": 0, "dialog_open": False, "session_id": None, "done": False}
 
+    # Pont vault (option A) : description des projets relue, embedding recalculé
+    try:
+        with db.db() as conn:
+            vault.sync_project_embeddings(conn)
+    except Exception:
+        log.exception("sync vault ignorée (erreur)")
+
     if items:
         with db.db() as conn:
             state["session_id"] = conn.execute("INSERT INTO sessions DEFAULT VALUES").lastrowid
@@ -163,7 +180,7 @@ def tri_page():
     header_label = ui.label().classes("text-lg opacity-70")
     card = ui.column().classes("w-full")
 
-    # Capture locale d'un bookmark : champ URL, utilisable à tout moment
+    # Capture locale : champ URL (bookmark) + bouton texte/code (note)
     with ui.row().classes("w-full max-w-3xl mx-auto items-center gap-2"):
         url_input = ui.input(placeholder="Coller une URL à capturer…").classes("grow")
 
@@ -182,6 +199,40 @@ def tri_page():
 
         ui.button("Capturer", on_click=capture_url).props("outline")
         url_input.on("keydown.enter", capture_url)
+
+        async def open_note_dialog():
+            state["dialog_open"] = True
+            with ui.dialog() as note_dlg, ui.card().classes("w-full max-w-2xl"):
+                ui.label("Coller du texte ou du code").classes("text-lg")
+                ta = ui.textarea(placeholder="Colle ici…").classes("w-full")
+                ta.props("autogrow outlined")
+                with ui.row():
+                    ui.button(
+                        "Capturer",
+                        on_click=lambda: (
+                            note_dlg.close(),
+                            ingest_text_and_notify(ta.value),
+                        ),
+                    )
+                    ui.button("Annuler", on_click=note_dlg.close).props("flat")
+            note_dlg.on("hide", lambda: state.update(dialog_open=False))
+            note_dlg.open()
+            ui.run_javascript(
+                "setTimeout(() => document.querySelector('.q-textarea textarea')?.focus(), 100)"
+            )
+
+        ui.button("＋ Texte/code", on_click=open_note_dialog).props("outline flat")
+
+    def ingest_text_and_notify(text: str):
+        try:
+            _item_id, status = ingest_text(text)
+        except Exception:
+            ui.notify("Texte vide", type="negative")
+            return
+        ui.notify(
+            "Capture ajoutée à l'inbox" if status == "ok" else "Déjà en inbox (doublon)",
+            type="positive" if status == "ok" else "info",
+        )
 
     with ui.column().classes("w-full max-w-3xl mx-auto p-2 opacity-70 text-sm"):
         ui.markdown(
@@ -235,8 +286,12 @@ def tri_page():
         card.clear()
         with card, ui.card().classes("w-full"):
             url = _archive_url(item)
-            if url:
+            if url and item["type"] in ("photo", "screenshot"):
                 ui.image(url).classes("max-h-96 w-auto")
+            if item["type"] == "file" and url:
+                with ui.row().classes("items-center gap-2"):
+                    ui.badge(Path(item["source_path"]).suffix).color("purple")
+                    ui.link("Ouvrir le fichier", url).classes("text-blue-400")
             if item["title"]:
                 ui.label(item["title"]).classes("text-lg font-semibold")
             if item["url"]:

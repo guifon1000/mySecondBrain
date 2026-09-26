@@ -105,6 +105,13 @@ EMBED_MODEL = os.getenv("SB_EMBED_MODEL", "nomic-embed-text")
 # Vision désactivé par défaut (voir cahier des charges) : SB_VISION_MODEL=moondream pour activer
 VISION_MODEL = os.getenv("SB_VISION_MODEL", "")
 
+# --- Vault Obsidian (pont unidirectionnel, option A) -----------------------
+# myVault = espace d'écriture ; la DB reste la source de vérité du pipeline.
+# L'app crée un stub .md à la création de projet et ne RELIT que le
+# frontmatter (id, description) — elle ne réécrit jamais le fichier.
+VAULT_DIR = _path("SB_VAULT_DIR", ROOT / "myVault")
+VAULT_PROJECTS_DIR = os.getenv("SB_VAULT_PROJECTS_DIR", "Projets")
+
 # --- OCR ------------------------------------------------------------------
 OCR_LANG = os.getenv("SB_OCR_LANG", "fra+eng")
 OCR_MIN_CHARS = int(os.getenv("SB_OCR_MIN_CHARS", "20"))

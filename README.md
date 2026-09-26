@@ -22,13 +22,23 @@ Interface : http://localhost:8420
    automatique par le registre) → copie vers `data/archives/`, dédup, OCR +
    embedding en fond. Elle apparaît dans l'inbox en quelques secondes.
    (Dossier surchargeable via `SB_WATCH_DIRS` dans `.env`.)
-2. **Bookmarks** : colle l'URL dans le champ en haut de la page de tri
-   (Entrée ou bouton "Capturer"). Titre récupéré via oEmbed quand possible
+2. **Bookmarks & texte** : colle l'URL dans le champ en haut de la page de
+   tri (Entrée ou bouton "Capturer"), ou colle du code / du texte via le
+   bouton "＋ Texte/code". Titre récupéré via oEmbed quand possible
    (YouTube oui, X non).
 3. **Le rituel quotidien** : ouvrir l'interface, trier 5-10 min :
    - `A` archiver · `1-9` lier à un projet · `C` créer un projet et y lier
      l'item · `→` passer · `S` rejeter une suggestion (une fois le seuil activé).
-4. Les sessions sont journalisées : le critère de succès de v0
+4. **Fichiers du passé (PDF, code, notes)** : dépose-les dans le dossier
+   surveillé (ou un dossier dédié via `SB_WATCH_DIRS`) — ils sont ingérés au
+   démarrage (rattrapage) : texte extrait (pypdf pour les PDF), embedding,
+   inbox. Extension blanchie (pdf, py, md, txt, ts...).
+5. **Vault Obsidian** (`myVault/`) : chaque projet créé pendant le tri génère
+   un stub dans `myVault/Projets/`. Écris librement dedans ; seule la ligne
+   `description:` du frontmatter est relue (embedding du projet tant qu'il
+   n'a pas d'items liés). L'app ne réécrit jamais tes fichiers — renomme,
+   déplace, lie des notes comme tu veux.
+6. Les sessions sont journalisées : le critère de succès de v0
    (≥ 10 sessions / 14 jours, médiane ≤ 10 min, inbox stable) est mesuré dans
    la table `sessions`, affiché sur l'écran d'accueil.
 

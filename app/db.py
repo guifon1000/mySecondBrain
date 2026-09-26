@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS items (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    type               TEXT NOT NULL CHECK (type IN ('photo', 'screenshot', 'bookmark')),
+    type               TEXT NOT NULL
+                       CHECK (type IN ('photo', 'screenshot', 'bookmark',
+                                       'file', 'note')),
     source_path        TEXT,
     url                TEXT,
     title              TEXT,
@@ -59,6 +61,37 @@ CREATE INDEX IF NOT EXISTS idx_items_ingest ON items(ingest_done) WHERE ingest_d
 """
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Migrations simples. La base étant personnelle et petite, on reconstruit
+    la table items si sa contrainte de type ne connaît pas les nouveaux types.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'items'"
+    ).fetchone()
+    if row and "'note'" not in (row["sql"] or ""):
+        count = conn.execute("SELECT COUNT(*) c FROM items").fetchone()["c"]
+        if count == 0:
+            conn.execute("DROP TABLE items")
+        else:
+            conn.executescript(
+                """
+                ALTER TABLE items RENAME TO items_old;
+                DROP INDEX IF EXISTS idx_items_ingest;
+                """
+            )
+            conn.executescript(SCHEMA)
+            conn.execute(
+                """INSERT INTO items (id, type, source_path, url, title, ocr_text,
+                   vision_description, embedding, sha256, created_at, status,
+                   linked_project_id, ingest_done)
+                   SELECT id, type, source_path, url, title, ocr_text,
+                   vision_description, embedding, sha256, created_at, status,
+                   linked_project_id, ingest_done FROM items_old"""
+            )
+            conn.execute("DROP TABLE items_old")
+            conn.execute("UPDATE sqlite_sequence SET seq = seq WHERE name = 'items'")
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(config.DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -81,7 +114,14 @@ def db() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     config.ensure_dirs()
     with db() as conn:
+        _migrate(conn)
         conn.executescript(SCHEMA)
+        # Colonne vault_path sur projects (ajout incrémental)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
+        for col in ("vault_path TEXT", "vault_mtime REAL"):
+            name = col.split()[0]
+            if name not in cols:
+                conn.execute(f"ALTER TABLE projects ADD COLUMN {col}")
 
 
 # --- Requêtes utilitaires ---------------------------------------------------

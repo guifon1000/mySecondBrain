@@ -39,9 +39,32 @@ La capture mobile (Syncthing, HTTP Shortcuts, Tailscale) est **reportée** :
 le noyau est conçu pour la réactiver plus tard sans refonte, mais elle ne
 doit pas compliquer le démarrage.
 
+## Types d'items
+
+| type | comment ça arrive | contenu extrait |
+|---|---|---|
+| `screenshot` / `photo` | capture d'écran ou image déposée dans un dossier surveillé | OCR (+ vision optionnel) |
+| `bookmark` | champ URL dans l'UI, ou endpoint HTTP | titre oEmbed si dispo + URL |
+| `note` | bouton "＋ Texte/code" dans l'UI (coller un snippet, une pensée) | le texte lui-même |
+| `file` | PDF, code, markdown... déposé dans un dossier surveillé | texte extrait (pypdf pour les PDF, lecture directe pour le texte) — extension blanchie | items déjà présents au premier lancement (dossiers existants), y compris le stock d'archives passées, sont ingérés au démarrage (rattrapage). C'est le canal pour backfiller "les tas de choses qui m'ont intéressé par le passé".
+
+## Vault Obsidian (pont unidirectionnel, option A)
+
+`myVault/` est l'espace d'écriture ; la DB reste la source de vérité du pipeline.
+
+- À la création d'un projet (touche `C` pendant le tri), l'app crée un stub
+  `myVault/Projets/<slug>.md` avec frontmatter `id`, `description`, `created`.
+- L'app ne réécrit **jamais** un fichier existant. Renommer ou déplacer le
+  fichier dans Obsidian ne casse rien (lien par `id:` frontmatter).
+- L'app ne relit que le frontmatter : `description` sert d'embedding du projet
+  tant qu'il n'a pas d'items liés ; ensuite l'embedding vient des items. La
+  relecture est déclenchée au chargement de la page de tri (détection mtime).
+- Le contenu libre du fichier projet (tes notes, tes connexions) n'est jamais
+  parsé — c'est ton espace.
+
 ## Traitement à l'ingestion
 
-1. Un watcher (Python, `watchdog`) détecte les nouveaux fichiers dans les dossiers surveillés, et le champ URL / l'endpoint reçoivent les bookmarks.
+1. Un watcher (Python, `watchdog`) détecte les nouveaux fichiers dans les dossiers surveillés, et le champ URL / bouton texte / endpoint reçoivent les bookmarks et notes.
 2. **Le watcher COPIE le fichier hors du dossier source** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier du dossier source : si l'utilisateur supprime une capture, l'archive doit survivre.
 3. **Déduplication** par hash SHA-256 du fichier (ou de l'URL pour les bookmarks) : un doublon est ignoré silencieusement.
 4. OCR sur les images (`pytesseract` / Tesseract, langue `fra+eng`). Si le texte extrait est trop court (< ~20 caractères), l'item est marqué "photo sans texte" et passe au modèle vision s'il est activé.
@@ -104,7 +127,7 @@ Table **items** :
 | champ | description |
 |---|---|
 | `id` | identifiant unique |
-| `type` | photo / capture d'écran / bookmark |
+| `type` | screenshot / photo / bookmark / note / file |
 | `source_path` | chemin de la copie archivée dans `data/archives/` |
 | `url` | URL pour les bookmarks |
 | `title` | titre oEmbed si disponible |
@@ -117,7 +140,7 @@ Table **items** :
 | `linked_project_id` | projet associé si lié |
 | `ingest_done` | 0 = en attente d'enrichissement, 1 = traité |
 
-Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`.
+Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`, `vault_path`, `vault_mtime` (pont vault, option A).
 
 Table **sessions** : `id`, `started_at`, `ended_at`, `items_reviewed`, `archived`, `linked`, `projects_created`.
 

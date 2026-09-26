@@ -144,6 +144,31 @@ def _embed_sync(text: str) -> Optional[np.ndarray]:
     return np.frombuffer(blob, dtype=np.float32) if blob else None
 
 
+# --- Extraction de texte des fichiers --------------------------------------
+
+MAX_FILE_TEXT = 8000  # caractères gardés pour l'embedding / l'affichage
+
+
+def extract_file_text(path: Path) -> str:
+    """Texte d'un fichier non-image (PDF via pypdf, autres = lecture directe)."""
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        try:
+            from pypdf import PdfReader
+
+            reader = PdfReader(str(path))
+            return "\n".join(
+                (page.extract_text() or "") for page in reader.pages
+            ).strip()[:MAX_FILE_TEXT]
+        except Exception:
+            log.info("texte PDF non extractible : %s", path.name)
+            return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[:MAX_FILE_TEXT]
+    except OSError:
+        return ""
+
+
 # --- Worker -----------------------------------------------------------------
 
 def _enrich_item(item_id: int) -> None:
@@ -163,6 +188,11 @@ def _enrich_item(item_id: int) -> None:
                 ocr_text = ocr_image(path)
             if len(ocr_text) < config.OCR_MIN_CHARS:
                 vision_desc = describe_image(path) or None
+    elif item["type"] == "file" and item["source_path"]:
+        path = Path(item["source_path"])
+        if path.exists():
+            ocr_text = ocr_text or extract_file_text(path)
+            title = title or path.name
 
     if item["type"] == "bookmark" and item["url"] and not title:
         title = fetch_title(item["url"]) or None

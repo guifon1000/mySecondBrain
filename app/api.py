@@ -44,6 +44,25 @@ def ingest_url(url: str) -> tuple[int, str]:
     return item_id, status
 
 
+def ingest_text(text: str) -> tuple[int, str]:
+    """Capture d'un texte/code collé depuis l'UI (type d'item 'note')."""
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="texte vide")
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    with db.db() as conn:
+        if conn.execute("SELECT 1 FROM items WHERE sha256 = ?", (digest,)).fetchone():
+            return 0, "duplicate"
+        cur = conn.execute(
+            "INSERT INTO items (type, ocr_text, sha256) VALUES ('note', ?, ?)",
+            (text[:enrich.MAX_FILE_TEXT], digest),
+        )
+        item_id = cur.lastrowid
+    enrich.enqueue(item_id)
+    log.info("note ingérée (%d caractères)", len(text))
+    return item_id, "ok"
+
+
 @app.post("/ingest/bookmark")
 def ingest_bookmark(body: dict, x_ingest_token: str = Header(default="")) -> dict:
     if config.INGEST_TOKEN:

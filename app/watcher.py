@@ -20,6 +20,14 @@ from . import config, db, enrich
 log = logging.getLogger("watcher")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".gif"}
+# Fichiers non-image acceptés : PDF, code, notes texte (type d'item 'file')
+FILE_EXTS = {
+    ".pdf", ".txt", ".md", ".py", ".ipynb", ".csv", ".json", ".yaml", ".yml",
+    ".toml", ".rs", ".ts", ".tsx", ".js", ".jsx", ".c", ".h", ".cpp", ".hpp",
+    ".cs", ".go", ".java", ".kt", ".swift", ".sql", ".sh", ".bat", ".ps1",
+    ".tex", ".xml", ".html", ".css", ".r",
+}
+HANDLED_EXTS = IMAGE_EXTS | FILE_EXTS
 # Syncthing écrit par morceaux et sur Windows l'événement "created" arrive
 # parfois quand le fichier fait encore 0 octet (idem si un outil de capture
 # écrit lentement) : on attend la stabilité.
@@ -29,12 +37,12 @@ _MAX_WAIT = 30       # garde-fou : abandon après 30 s d'instabilité
 
 
 def _classify(path: Path) -> str:
-    parent = path.parent.name.lower()
-    return (
-        "screenshot"
-        if any(k in parent for k in ("screenshot", "capture", "écran", "ecran"))
-        else "photo"
-    )
+    if path.suffix.lower() in IMAGE_EXTS:
+        parent = path.parent.name.lower()
+        if any(k in parent for k in ("screenshot", "capture", "écran", "ecran")):
+            return "screenshot"
+        return "photo"
+    return "file"
 
 
 def _wait_stable(path: Path) -> bool:
@@ -63,6 +71,9 @@ def _wait_stable(path: Path) -> bool:
 
 
 def ingest_file(src: Path) -> None:
+    name = src.name
+    if name.startswith((".", "~$")) or name.lower() in ("desktop.ini", "thumbs.db"):
+        return
     if not _wait_stable(src):
         return
     digest = enrich.sha256_file(src)
@@ -70,7 +81,7 @@ def ingest_file(src: Path) -> None:
     with db.db() as conn:
         dup = conn.execute("SELECT id FROM items WHERE sha256 = ?", (digest,)).fetchone()
         if dup:
-            log.info("doublon ignoré : %s", src.name)
+            log.info("doublon ignoré : %s", name)
             return
         # Copie vers l'archive — hors du dossier source, survit aux suppressions
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -83,13 +94,13 @@ def ingest_file(src: Path) -> None:
         item_id = cur.lastrowid
 
     enrich.enqueue(item_id)
-    log.info("ingéré : %s -> %s", src.name, dest.name)
+    log.info("ingéré : %s -> %s", name, dest.name)
 
 
 class Handler(FileSystemEventHandler):
     def on_created(self, event) -> None:
         path = Path(event.src_path)
-        if path.suffix.lower() in IMAGE_EXTS:
+        if path.suffix.lower() in HANDLED_EXTS:
             ingest_file(path)
 
 
@@ -113,7 +124,7 @@ def _catch_up() -> None:
         if not watched_dir.is_dir():
             continue
         for path in sorted(watched_dir.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in IMAGE_EXTS:
+            if not path.is_file() or path.suffix.lower() not in HANDLED_EXTS:
                 continue
             digest = enrich.sha256_file(path)
             with db.db() as conn:
