@@ -17,11 +17,11 @@ Interface : http://localhost:8420
 ## Comment ça marche
 
 1. **Captures d'écran / images** : dès que tu prends une capture Windows
-   (`Win+PrtScn`, outil Capture, etc.), elle arrive dans
-   `Pictures\Screenshots` → le watcher la copie vers `data/archives/`,
-   la déduplique, et un worker fait OCR + embedding en fond. Elle apparaît
-   dans l'inbox en quelques secondes.
-   (Dossiers surchargeables via `SB_WATCH_DIRS` dans `.env`.)
+   (`Win+PrtScn`, Snipping Tool, etc.), elle est détectée dans ton dossier de
+   captures (`OneDrive\Pictures\Captures d'écran` sur Windows FR, détection
+   automatique par le registre) → copie vers `data/archives/`, dédup, OCR +
+   embedding en fond. Elle apparaît dans l'inbox en quelques secondes.
+   (Dossier surchargeable via `SB_WATCH_DIRS` dans `.env`.)
 2. **Bookmarks** : colle l'URL dans le champ en haut de la page de tri
    (Entrée ou bouton "Capturer"). Titre récupéré via oEmbed quand possible
    (YouTube oui, X non).

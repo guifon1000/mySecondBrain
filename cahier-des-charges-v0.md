@@ -2,9 +2,11 @@
 
 ## Problème à résoudre
 
-Capture continue de photos, captures d'écran et bookmarks (X, YouTube) sur le téléphone, jamais réorganisés ensuite : ça tombe dans l'oubli.
+Capture continue de photos, captures d'écran et bookmarks, jamais réorganisés ensuite : ça tombe dans l'oubli.
 
-**Objectif v0** : un rituel quotidien de 5 à 10 minutes, sur ordinateur, qui vide le stock de captures du téléphone sans effort et sans y repenser le reste de la journée.
+**Objectif v0** : un rituel quotidien de 5 à 10 minutes, sur ordinateur, qui vide le stock de captures sans effort et sans y repenser le reste de la journée.
+
+**Choix de périmètre (pivot)** : v0 tourne 100 % en local sur le PC. La capture mobile (Syncthing, HTTP Shortcuts, Tailscale) est reportée — voir "Parcours de capture" — pour que le rituel démarre avec la friction minimale possible. Le critère de succès ne change pas.
 
 ## Critère de succès de v0 (avant tout le reste)
 
@@ -27,10 +29,7 @@ Tant que ce n'est pas vrai, rien d'autre ne doit être construit — voir `cahie
 
 Tout tourne sur le PC. Deux canaux de capture :
 
-- **Images (captures d'écran, photos)** : le watcher surveille les dossiers
-  Windows standards (`%USERPROFILE%\Pictures\Screenshots` et `Pictures`,
-  surchargeables via `SB_WATCH_DIRS`). Prendre une capture d'écran suffit :
-  elle arrive dans l'inbox en quelques secondes.
+- **Images (captures d'écran, photos)** : le watcher surveille le dossier de captures d'écran du PC, **détecté automatiquement via le registre Windows** (gère Windows FR — `OneDrive\Pictures\Captures d'écran` — et EN), surchargeable via `SB_WATCH_DIRS`. Le dossier est ciblé précisément pour ne pas ingérer la pellicule OneDrive (photos du téléphone synchronisées). Prendre une capture d'écran suffit : elle arrive dans l'inbox en quelques secondes.
 - **Bookmarks** : champ URL directement dans l'interface de tri (coller,
   Entrée ou bouton Capturer). Un endpoint HTTP `POST /ingest/bookmark`
   subsiste pour un usage avancé (bookmarklet, HTTP Shortcuts), authentifié
@@ -72,7 +71,7 @@ Le mécanisme existe dans le code (similarité cosinus item ↔ projet, seuil co
   - `A` = archiver (un geste, zéro décision supplémentaire, l'item sort de l'inbox — conservé, pas supprimé)
   - `1`–`9` = lier au projet n de la liste affichée à l'écran
   - `C` = créer un nouveau projet et y lier l'item courant
-  - navigation `←`/`→` ou `Espace` pour rejeter visuellement sans décider (l'item reste en inbox)
+  - navigation `→` ou `Espace` pour passer sans décider (l'item reste en inbox)
   - `S` = rejeter la suggestion affichée (quand les suggestions sont activées)
 - Session **plafonnée à 15 items** par défaut (configurable) pour respecter la fenêtre 5-10 min.
 - Une entrée est créée dans `sessions` à l'ouverture du tri (si de nouveaux items existent) et clôturée automatiquement.
@@ -97,7 +96,6 @@ Le tri ne doit pas être qu'une corvée de soustraction. Dès v0 :
 - **Conteneurisation** : hors scope. Un process local suffit.
 - **Réseau** : tout en local (`127.0.0.1` par défaut). Pas de Tailscale, pas d'exposition, pas de certificats.
 - **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie simple documentée dans le README.
-- **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie quotidienne simple (cron/rsync) documentée dans le README.
 
 ## Schéma de données (SQLite)
 
