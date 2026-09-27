@@ -88,8 +88,9 @@ def ingest_file(src: Path) -> None:
         dest = config.ARCHIVE_DIR / f"{stamp}{src.suffix.lower()}"
         shutil.copy2(src, dest)
         cur = conn.execute(
-            "INSERT INTO items (type, source_path, sha256, embedding) VALUES (?, ?, ?, NULL)",
-            (_classify(src), str(dest), digest),
+            "INSERT INTO items (type, source_path, title, sha256, embedding) "
+            "VALUES (?, ?, ?, ?, NULL)",
+            (_classify(src), str(dest), src.name, digest),
         )
         item_id = cur.lastrowid
 
