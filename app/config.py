@@ -71,25 +71,25 @@ def _windows_capture_dirs() -> list[Path]:
 
 
 def _watch_dirs() -> list[Path]:
-    """Dossiers surveillés pour les captures d'images.
-
-    Défaut (v0 locale) : le dossier de captures d'écran du PC (détection
-    registre, gère Windows FR/EN), sinon ./data/watched. Surchargeable via
-    SB_WATCH_DIRS (séparateur « ; »).
+    """Dossiers surveillés. L'inbox du vault (myVault/Inbox) est TOUJOURS
+    surveillée : c'est l'inbox unique — on y dépose tout (images, PDF, code,
+    notes). S'y ajoute le dossier de captures d'écran du PC (détection
+    registre, gère Windows FR/EN), qui alimente la même inbox.
     """
+    vault_dir = _path("SB_VAULT_DIR", ROOT / "myVault")
+    vault_inbox = vault_dir / os.getenv("SB_VAULT_INBOX_DIR", "Inbox")
+    vault_inbox.mkdir(parents=True, exist_ok=True)
+
     raw = os.getenv("SB_WATCH_DIRS", "")
     if raw:
         dirs = [Path(p) for p in raw.split(";") if p]
     elif sys.platform.startswith("win"):
-        dirs = _windows_capture_dirs()
+        dirs = [d for d in _windows_capture_dirs() if d != vault_inbox]
     else:
         dirs = []
-    # Le dossier d'ingestion de documents (PDF, code, md...) est toujours surveillé
-    docs = ROOT / "inbox-docs"
-    docs.mkdir(exist_ok=True)
-    if docs not in dirs:
-        dirs.append(docs)
-    return dirs if dirs else [DATA_DIR / "watched"]
+    if vault_inbox not in dirs:
+        dirs.append(vault_inbox)
+    return dirs
 
 
 WATCH_DIRS = _watch_dirs()

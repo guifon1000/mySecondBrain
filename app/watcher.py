@@ -74,14 +74,20 @@ def ingest_file(src: Path) -> None:
     name = src.name
     if name.startswith((".", "~$")) or name.lower() in ("desktop.ini", "thumbs.db"):
         return
+    # Ne jamais ré-ingérer les notes que l'app crée elle-même dans l'inbox vault
+    if name.startswith("SB-") and name.endswith(".md"):
+        return
     if not _wait_stable(src):
         return
     digest = enrich.sha256_file(src)
+    from_vault_inbox = _is_vault_inbox(src)
 
     with db.db() as conn:
         dup = conn.execute("SELECT id FROM items WHERE sha256 = ?", (digest,)).fetchone()
         if dup:
             log.info("doublon ignoré : %s", name)
+            if from_vault_inbox:
+                _remove_from_vault_inbox(src, digest)
             return
         # Copie vers l'archive — hors du dossier source, survit aux suppressions
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -90,12 +96,42 @@ def ingest_file(src: Path) -> None:
         cur = conn.execute(
             "INSERT INTO items (type, source_path, title, sha256, embedding) "
             "VALUES (?, ?, ?, ?, NULL)",
-            (_classify(src), str(dest), src.name, digest),
+            (_classify(src), str(dest), name, digest),
         )
         item_id = cur.lastrowid
 
     enrich.enqueue(item_id)
+    if from_vault_inbox:
+        # L'inbox du vault ne contient que des notes : le fichier déposé
+        # rejoint pieces/ (l'archive en garde une copie canonique).
+        _remove_from_vault_inbox(src, digest)
     log.info("ingéré : %s -> %s", name, dest.name)
+
+
+def _is_vault_inbox(path: Path) -> bool:
+    inbox = Path(config.VAULT_DIR) / config.VAULT_INBOX_DIR
+    try:
+        return path.resolve().is_relative_to(inbox.resolve())
+    except (OSError, ValueError):
+        return False
+
+
+def _remove_from_vault_inbox(src: Path, digest: str) -> None:
+    """Sort le fichier déposé de l'inbox vault : déplacé vers pieces/
+    (même nom si libre, sinon préfixe horodaté) ; supprimé si une copie
+    identique y figure déjà."""
+    pieces = Path(config.VAULT_DIR) / config.VAULT_PIECES_DIR
+    pieces.mkdir(parents=True, exist_ok=True)
+    dest = pieces / src.name
+    if dest.exists():
+        if enrich.sha256_file(dest) == digest:
+            src.unlink(missing_ok=True)
+            return
+        dest = pieces / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{src.name}"
+    try:
+        shutil.move(str(src), str(dest))
+    except OSError:
+        log.warning("fichier %s non sorti de l'inbox (verrouillé ?)", src.name)
 
 
 class Handler(FileSystemEventHandler):
