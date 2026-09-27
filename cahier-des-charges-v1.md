@@ -21,6 +21,7 @@ Rendre le rituel de tri quotidien agréable ("kiffant") plutôt que corvée, en 
 
 ### Débris (items non liés)
 - Simulation de forces (type `d3-force`) : répulsion mutuelle entre tous les débris, attraction faible entre débris sémantiquement proches, attraction très faible vers les îles pour lesquelles le score est non nul.
+- **Position initiale des débris** (idée héritée de RAGDungeon/Palais des Connaissances, fouille du 2026-09-27, voir `myVault/Vestiges RAG — leçons.md`) : dérivée d'une réduction de dimension (UMAP ou PCA) sur les embeddings — les débris naissent groupés par affinité naturelle au lieu d'un spawn aléatoire, et la simulation de forces n'a plus qu'à raffiner. À ne considérer qu'en v1, sur critère d'usage.
 - **Deux seuils distincts** (seuils calibrés sur les données réelles de v0, pas posés à l'aveugle) :
   - Seuil bas → dérive visuelle vers une île (signal doux, sans conséquence, visible tôt).
   - Seuil haut → suggestion active de lien dans le flux de tri (l'utilisateur doit trancher).
