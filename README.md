@@ -52,10 +52,13 @@ Interface : http://localhost:8420
 Copier `.env.example` vers `.env` si besoin. Par défaut :
 - auth de l'endpoint désactivée (tout est en local),
 - OCR désactivé si Tesseract n'est pas installé (les items restent triables),
-- embeddings désactivés si Ollama ne tourne pas (idem),
-- vision photo désactivée (`SB_VISION_MODEL` vide).
+- **IA via OpenRouter** : sans `SB_OPENROUTER_API_KEY`, pas d'embeddings
+  (items ingérés sans vecteur, tri manuel OK) ; vision photo désactivée par
+  défaut (`SB_VISION_MODEL` vide, coût par photo). Un modèle par tâche :
+  `SB_EMBED_MODEL`, `SB_VISION_MODEL`, `SB_TEXT_MODEL`.
 
-Aucun de ces services ne bloque la capture ni le tri.
+La capture, le tri et le vault fonctionnent sans aucune clé — l'IA ne fait
+qu'enrichir les suggestions.
 
 ## Calibration des suggestions (après ~1 semaine d'usage)
 

@@ -99,11 +99,19 @@ INGEST_TOKEN = os.getenv("SB_INGEST_TOKEN", "")
 HOST = os.getenv("SB_HOST", "0.0.0.0")
 PORT = int(os.getenv("SB_PORT", "8420"))
 
-# --- Ollama ---------------------------------------------------------------
-OLLAMA_URL = os.getenv("SB_OLLAMA_URL", "http://127.0.0.1:11434")
-EMBED_MODEL = os.getenv("SB_EMBED_MODEL", "nomic-embed-text")
-# Vision désactivé par défaut (voir cahier des charges) : SB_VISION_MODEL=moondream pour activer
+# --- IA via OpenRouter (pas de modèle local) ------------------------------
+# Clé API : https://openrouter.ai/keys — SB_OPENROUTER_API_KEY requis pour
+# les embeddings/vision. Sans clé, la capture et le tri restent fonctionnels
+# (dégradation gracieuse, cf. cahier des charges).
+OPENROUTER_URL = os.getenv("SB_OPENROUTER_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_API_KEY = os.getenv("SB_OPENROUTER_API_KEY", "")
+
+# Un modèle par tâche — chaque tâche est indépendante, change sans toucher au code :
+EMBED_MODEL = os.getenv("SB_EMBED_MODEL", "openai/text-embedding-3-small")
+# Vision désactivé par défaut (coût par photo) — ex. SB_VISION_MODEL=google/gemini-2.5-flash
 VISION_MODEL = os.getenv("SB_VISION_MODEL", "")
+# Modèle texte générique (réservé, ex. résumés futurs)
+TEXT_MODEL = os.getenv("SB_TEXT_MODEL", "google/gemini-2.5-flash")
 
 # --- Vault Obsidian (pont unidirectionnel, option A) -----------------------
 # myVault = espace d'écriture ; la DB reste la source de vérité du pipeline.

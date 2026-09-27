@@ -1,9 +1,13 @@
-"""Enrichissement des items en arrière-plan : OCR, vision (option), oEmbed, embeddings.
+"""Enrichissement des items en arrière-plan : OCR, vision, oEmbed, embeddings.
+
+Tous les appels IA passent par OpenRouter (une clé, un modèle par tâche,
+pas de modèle local — cf. cahier des charges v0).
 
 Principes (cahier des charges v0) :
-- la capture ne doit jamais échouer parce qu'un service annexe est down ;
+- la capture ne doit jamais échouer parce que l'API est down ou absente ;
 - les traitements lourds tournent dans une file, jamais dans le chemin de capture.
 """
+import base64
 import hashlib
 import logging
 import queue
@@ -23,37 +27,46 @@ _queue: "queue.Queue[int]" = queue.Queue()
 _worker: Optional[threading.Thread] = None
 
 
-# --- Ollama -----------------------------------------------------------------
+# --- OpenRouter -------------------------------------------------------------
 
-def ollama_alive() -> bool:
-    try:
-        return requests.get(f"{config.OLLAMA_URL}/api/tags", timeout=3).ok
-    except Exception:
-        return False
+def api_configured() -> bool:
+    return bool(config.OPENROUTER_API_KEY)
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:8420",
+        "X-Title": "Second cerveau",
+    }
 
 
 def embed(text: str) -> Optional[bytes]:
-    """Vecteur nomic-embed-text en BLOB numpy float32, ou None si Ollama absent."""
+    """Vecteur d'embedding en BLOB numpy float32, ou None si pas de clé / erreur."""
     text = (text or "").strip()
-    if not text:
+    if not text or not api_configured():
         return None
     try:
         r = requests.post(
-            f"{config.OLLAMA_URL}/api/embeddings",
-            json={"model": config.EMBED_MODEL, "prompt": text[:4000]},
-            timeout=30,
+            f"{config.OPENROUTER_URL}/embeddings",
+            headers=_headers(),
+            json={"model": config.EMBED_MODEL, "input": text[:8000]},
+            timeout=60,
         )
         r.raise_for_status()
-        vec = np.asarray(r.json()["embedding"], dtype=np.float32)
+        vec = np.asarray(r.json()["data"][0]["embedding"], dtype=np.float32)
         return vec.tobytes()
     except Exception:
-        log.warning("embedding indisponible (Ollama down ?) — item ingéré sans vecteur")
+        log.warning("embedding indisponible (OpenRouter : clé manquante, crédits, réseau ?) "
+                    "— item ingéré sans vecteur")
         return None
 
 
 # --- OCR / vision -----------------------------------------------------------
 
 def ocr_image(path: Path) -> str:
+    """OCR local (Tesseract) — indépendant d'OpenRouter, optionnel."""
     try:
         import pytesseract
         from PIL import Image
@@ -65,24 +78,31 @@ def ocr_image(path: Path) -> str:
 
 
 def describe_image(path: Path) -> str:
-    if not config.VISION_MODEL:
+    """Description d'une image via un modèle vision OpenRouter (chat).
+    Désactivé tant que SB_VISION_MODEL est vide."""
+    if not config.VISION_MODEL or not api_configured():
         return ""
     try:
-        import base64
-
         b64 = base64.b64encode(path.read_bytes()).decode()
+        mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
         r = requests.post(
-            f"{config.OLLAMA_URL}/api/generate",
+            f"{config.OPENROUTER_URL}/chat/completions",
+            headers=_headers(),
             json={
                 "model": config.VISION_MODEL,
-                "prompt": "Décris cette image en une phrase concise.",
-                "images": [b64],
-                "stream": False,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Décris cette image en une phrase concise."},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    ],
+                }],
+                "max_tokens": 120,
             },
             timeout=120,
         )
         r.raise_for_status()
-        return r.json().get("response", "").strip()
+        return r.json()["choices"][0]["message"]["content"].strip()
     except Exception:
         log.warning("vision indisponible pour %s", path.name)
         return ""

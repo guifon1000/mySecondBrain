@@ -68,9 +68,11 @@ doit pas compliquer le démarrage.
 2. **Le watcher COPIE le fichier hors du dossier source** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier du dossier source : si l'utilisateur supprime une capture, l'archive doit survivre.
 3. **Déduplication** par hash SHA-256 du fichier (ou de l'URL pour les bookmarks) : un doublon est ignoré silencieusement.
 4. OCR sur les images (`pytesseract` / Tesseract, langue `fra+eng`). Si le texte extrait est trop court (< ~20 caractères), l'item est marqué "photo sans texte" et passe au modèle vision s'il est activé.
-5. Description optionnelle des photos non textuelles via un modèle vision local (Ollama, ex. moondream/llava). **Désactivé par défaut** — option activable sans changement de code.
+5. Description optionnelle des photos non textuelles via un modèle vision **OpenRouter** (ex. `google/gemini-2.5-flash`). **Désactivé par défaut** (coût par photo) — option activable sans changement de code.
 6. Pour les bookmarks : récupération du titre via oEmbed quand disponible (YouTube : oui ; X : pas d'oEmbed public fiable → on affiche l'URL brute, pas de promesse de preview au-delà). Pas de scraping lourd en v0.
-7. Embedding du contenu textuel (OCR + description + URL + titre) via un modèle d'embedding Ollama (ex. nomic-embed-text). Si Ollama est indisponible, l'item est ingéré **sans embedding** et reste triable manuellement — la capture ne doit jamais échouer parce qu'un service annexe est down.
+7. Embedding du contenu textuel (OCR + description + URL + titre) via l'endpoint embeddings d'**OpenRouter** (une clé API, modèle au choix, ex. `openai/text-embedding-3-small`). Sans clé ou en cas d'erreur, l'item est ingéré **sans embedding** et reste triable manuellement — la capture ne doit jamais échouer parce que l'API est down.
+
+**Choix IA** : pas de modèle local. Une clé OpenRouter, un modèle par tâche (`SB_EMBED_MODEL`, `SB_VISION_MODEL`, `SB_TEXT_MODEL`), changeables sans toucher au code.
 8. **Burst initial toléré** : le traitement (OCR, embedding) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux massif au premier lancement (rattrapage des dossiers existants) ralentit l'enrichissement, jamais la capture ni le tri.
 
 ## Projets
@@ -123,8 +125,8 @@ Le tri ne doit pas être qu'une corvée de soustraction. Dès v0 :
 - **API + UI** : FastAPI (endpoint de réception des bookmarks) avec NiceGUI monté dessus — **un seul processus** : API, watcher, enrichissement, tri. Moins de services, moins de choses qui cassent.
 - **Watcher** : `watchdog`, thread dans le même processus.
 - **OCR** : `pytesseract` (dégradation gracieuse si Tesseract absent).
-- **Vision (option)** : modèle Ollama (moondream/llava), désactivé par défaut.
-- **Embeddings** : modèle d'embedding Ollama (nomic-embed-text) — pas de dépendance PyTorch.
+- **Vision (option)** : modèle vision OpenRouter, désactivé par défaut.
+- **Embeddings** : endpoint embeddings OpenRouter — pas de modèle local, pas de dépendance PyTorch.
 - **Métadonnées + vecteurs** : **SQLite unique** — les embeddings sont stockés en BLOB dans la table, similarité calculée en numpy (volumétrie personnelle : quelques milliers d'items, un produit matriciel suffit). **Pas de ChromaDB ni de service vectoriel séparé.**
 - **Conteneurisation** : hors scope. Un process local suffit.
 - **Réseau** : tout en local (`127.0.0.1` par défaut). Pas de Tailscale, pas d'exposition, pas de certificats.
