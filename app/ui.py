@@ -15,8 +15,8 @@ import numpy as np
 from nicegui import app, ui
 
 from . import config, db, enrich
+from . import codeproject, vault
 from .api import ingest_text, ingest_url
-from . import vault
 
 log = logging.getLogger("ui")
 
@@ -166,12 +166,17 @@ def tri_page():
 
     state = {"index": 0, "dialog_open": False, "session_id": None, "done": False}
 
-    # Pont vault (option A) : description des projets relue, embedding recalculé
+    # Pont vault (option A) + rafraîchissement des dépôts de code liés
     try:
         with db.db() as conn:
             vault.sync_project_embeddings(conn)
     except Exception:
         log.exception("sync vault ignorée (erreur)")
+    try:
+        with db.db() as conn:
+            codeproject.rescan_stale(conn)
+    except Exception:
+        log.exception("rescan des dépôts de code ignoré")
 
     if items:
         with db.db() as conn:
@@ -475,6 +480,43 @@ def project_page(project_id: int):
         ui.label(p["title"]).classes("text-2xl")
         if p["description"]:
             ui.label(p["description"]).classes("opacity-70")
+
+        # Dépôt de code lié (scan md + git pour l'embedding du projet)
+        with ui.card().classes("w-full"):
+            with ui.row().classes("w-full items-center gap-2 no-wrap"):
+                code_input = ui.input("Dossier du projet de code (optionnel)",
+                                      value=p["code_path"] or "").classes("grow")
+
+                def link_code():
+                    path = code_input.value.strip()
+                    if path and not Path(path).is_dir():
+                        ui.notify("Dossier introuvable", type="negative")
+                        return
+                    with db.db() as conn:
+                        conn.execute(
+                            "UPDATE projects SET code_path = ? WHERE id = ?",
+                            (path or None, project_id),
+                        )
+                        if path:
+                            n = codeproject.recompute_embedding(conn, project_id)
+                        else:
+                            n = -1
+                    if path and n >= 0:
+                        ui.notify(f"Dépôt lié — {n} fichiers md scannés", type="positive")
+                    elif path:
+                        ui.notify("Dépôt lié mais rien d'exploitable (pas de md)", type="warning")
+                    else:
+                        ui.notify("Dépôt délié")
+                    ui.navigate.to(f"/project/{project_id}")
+
+                ui.button("Lier & scanner", on_click=link_code).props("outline")
+            if p["code_path"]:
+                scanned = p["code_scan_at"] or "jamais"
+                ui.label(
+                    f"Dépôt lié : {p['code_path']} — dernier scan : {scanned} "
+                    f"(rescan auto toutes les 24 h au chargement du tri)"
+                ).classes("text-xs opacity-60")
+
         ui.label(f"{len(items)} items liés").classes("opacity-60")
         ui.separator()
         if not items:

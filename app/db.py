@@ -118,7 +118,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         # Colonne vault_path sur projects (ajout incrémental)
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
-        for col in ("vault_path TEXT", "vault_mtime REAL"):
+        for col in ("vault_path TEXT", "vault_mtime REAL", "code_path TEXT", "code_scan_at TEXT"):
             name = col.split()[0]
             if name not in cols:
                 conn.execute(f"ALTER TABLE projects ADD COLUMN {col}")

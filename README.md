@@ -38,7 +38,12 @@ Interface : http://localhost:8420
    `description:` du frontmatter est relue (embedding du projet tant qu'il
    n'a pas d'items liés). L'app ne réécrit jamais tes fichiers — renomme,
    déplace, lie des notes comme tu veux.
-6. Les sessions sont journalisées : le critère de succès de v0
+6. **Projet de code lié** : sur la page d'un projet, colle le chemin d'un
+   dossier de code (`C:\code\mon-depot`) → l'app scanne ses fichiers `.md`
+   (README, docs) et son historique git récent pour enrichir l'embedding du
+   projet. Tes captures de bugs et bookmarks de libs se rapprocheront du bon
+   dépôt. Jamais le code lui-même, jamais d'upload, tout en local.
+7. Les sessions sont journalisées : le critère de succès de v0
    (≥ 10 sessions / 14 jours, médiane ≤ 10 min, inbox stable) est mesuré dans
    la table `sessions`, affiché sur l'écran d'accueil.
 

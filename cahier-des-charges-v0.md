@@ -80,6 +80,16 @@ doit pas compliquer le démarrage.
 - Création de projet possible à tout moment : à l'ingestion (pas nécessaire), et pendant le tri (action "Créer un projet", avec lien immédiat de l'item courant).
 - Le scoring porte sur la liste des projets existants **au moment de l'affichage** — la création d'un nouveau projet est toujours permise et n'est pas une "découverte ouverte".
 
+- **Ancrage à un dépôt de code** : sur la page projet, un champ permet de
+  lier un dossier local (ex. `C:\code\mon-projet`). L'app y scanne — jamais
+  le code lui-même — les fichiers `*.md` (README, docs...) et l'historique
+  git récent (`git log --oneline -40`), tout plafonné (30 fichiers,
+  600 car/fichier). Le scan alimente l'embedding du projet : une capture
+  d'erreur, un bookmark de lib ou un snippet peuvent alors être suggérés
+  (puis, un jour, liés manuellement) vers le bon dépôt. Rescan auto 24 h au
+  chargement du tri ; les projets avec items liés mélangent 70 % items /
+  30 % dépôt.
+
 ## Suggestions de lien
 
 Le mécanisme existe dans le code (similarité cosinus item ↔ projet, seuil configurable), mais :
@@ -140,7 +150,7 @@ Table **items** :
 | `linked_project_id` | projet associé si lié |
 | `ingest_done` | 0 = en attente d'enrichissement, 1 = traité |
 
-Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`, `vault_path`, `vault_mtime` (pont vault, option A).
+Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`, `vault_path`, `vault_mtime` (pont vault, option A), `code_path`, `code_scan_at` (dépôt de code lié).
 
 Table **sessions** : `id`, `started_at`, `ended_at`, `items_reviewed`, `archived`, `linked`, `projects_created`.
 
