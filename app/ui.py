@@ -270,12 +270,13 @@ def tri_page():
             if item["type"] == "file" and url:
                 ext = Path(item["source_path"]).suffix.lower()
                 with ui.row().classes("items-center gap-2"):
-                    ui.badge(ext).color("purple")
+                    ui.badge(ext, color="purple")
                     ui.link("Ouvrir le fichier", url).classes("text-blue-400")
                 if ext == ".pdf" and not item["ocr_text"]:
                     ui.badge(
-                        "PDF sans couche texte (scanné ?) — demande à l'agent de le lire"
-                    ).color("orange")
+                        "PDF sans couche texte (scanné ?) — demande à l'agent de le lire",
+                        color="orange",
+                    )
             if item["title"]:
                 ui.label(item["title"]).classes("text-lg font-semibold")
             if item["url"]:
@@ -387,7 +388,7 @@ def tri_page():
                 with ui.row().classes("items-center gap-2 no-wrap"):
                     ui.badge(str(i + 1)).props("dense")
                     if p["kind"] == "casquette":
-                        ui.badge("casquette").color("teal").props("dense")
+                        ui.badge("casquette", color="teal").props("dense")
                     ui.label(p["title"])
                     ui.label(f"({p['item_count']})").classes("opacity-50 text-sm")
 
@@ -440,7 +441,7 @@ def projects_page():
                         with ui.row().classes("items-center gap-2"):
                             ui.label(p["title"]).classes("text-lg font-semibold")
                             if p["items_this_week"]:
-                                ui.badge(f"+{p['items_this_week']} cette semaine").color("green")
+                                ui.badge(f"+{p['items_this_week']} cette semaine", color="green")
                         ui.label(f"{p['item_count']} items").classes("opacity-60")
                     proj_card.on("click", lambda _, pid=p["id"]: ui.navigate.to(f"/project/{pid}"))
         ui.link("← Retour au tri", "/").classes("text-blue-400 mt-4")
