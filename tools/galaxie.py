@@ -30,7 +30,7 @@ from matplotlib.lines import Line2D
 ROOT = Path(__file__).resolve().parent.parent
 VAULT = ROOT / "myVault"
 IDEES = VAULT / "Idees"
-OUT_PNG = VAULT / "pieces" / "galaxie-idees.png"
+OUT_PNG = VAULT / "biblio" / "img" / "galaxie-idees.png"
 OUT_NOTE = IDEES / "Galaxie.md"
 
 IDEA, BEACON = "idee", "phare"
@@ -108,16 +108,16 @@ def main():
     depots, beacons, lineage = load_codebase()
 
     ideas, crosses = {}, []
-    for p in sorted(IDEES.glob("*.md")):
-        if p.stem.startswith(("00", "Galaxie", "Couvées")):
-            continue
-        doms, croise, source, body = parse_note(p)
-        if not doms:
-            continue
-        ideas[p.stem] = {"doms": doms, "croise": croise, "source": source,
-                         "tokens": tokens(body), "climat": doms[0]}
-        if croise:
-            crosses.append((p.stem, croise))
+    sub_by_kind = {"atomiques": IDEA, "satellites": IDEA}
+    for kind_dir in ("atomiques", "satellites"):
+        for p in sorted((IDEES / kind_dir).glob("*.md")):
+            doms, croise, source, body = parse_note(p)
+            if not doms:
+                continue
+            ideas[p.stem] = {"doms": doms, "croise": croise, "source": source,
+                             "tokens": tokens(body), "satellite": kind_dir == "satellites"}
+            if croise:
+                crosses.append((p.stem, croise))
 
     # --- diamètre (outils des dépôts) + phare d'attache (lignée) ------------
     for t, d in ideas.items():
@@ -178,7 +178,7 @@ def main():
             pos[n] = (pos[n][0] * 1.9, pos[n][1] * 1.9)
 
     # --- palette des climats -------------------------------------------------
-    climats = sorted({d["climat"] for d in ideas.values()})
+    climats = sorted({d["doms"][0] for d in ideas.values()})
     cmap = plt.get_cmap("tab20")
     climate_color = {c: cmap(i % 20 / 20) for i, c in enumerate(climats)}
 
@@ -211,13 +211,12 @@ def main():
                            node_color="#ffd54f", node_size=1900,
                            edgecolors="#0d1b2a", linewidths=1.5, ax=ax)
 
-    base_nodes, sat_nodes = [], []
-    for t in ideas:
-        (sat_nodes if ideas[t]["croise"] else base_nodes).append((IDEA, t))
+    base_nodes = [(IDEA, t) for t in ideas if not ideas[t]["satellite"]]
+    sat_nodes = [(IDEA, t) for t in ideas if ideas[t]["satellite"]]
     for nodes, marker, edge in ((base_nodes, "o", MER), (sat_nodes, "D", "#e8a13c")):
         nx.draw_networkx_nodes(
             G, pos, nodelist=nodes, node_shape=marker,
-            node_color=[climate_color[ideas[n[1]]["climat"]] for n in nodes],
+            node_color=[climate_color[ideas[n[1]]["doms"][0]] for n in nodes],
             node_size=[ideas[n[1]]["diameter"] for n in nodes],
             edgecolors=edge, linewidths=1.2 if marker == "D" else 0.6, ax=ax)
 
@@ -229,7 +228,7 @@ def main():
                     bbox=dict(facecolor=MER, alpha=0.75, edgecolor="none", pad=2))
         else:
             ax.text(x, y - 0.045, wrap(label, 20), ha="center", va="top",
-                    fontsize=7, color=climate_color[ideas[label]["climat"]],
+                    fontsize=7, color=climate_color[ideas[label]["doms"][0]],
                     bbox=dict(facecolor=MER, alpha=0.55, edgecolor="none", pad=0.7))
 
     ax.set_title(
@@ -264,7 +263,7 @@ def main():
     ranked = sorted(ideas.items(), key=lambda kv: -kv[1]["tool_score"])
     for t, d in ranked[:10]:
         lines.append(f"- score {d['tool_score']:.2f} — [[{t}]] "
-                     f"(climat : {d['climat']})")
+                     f"(climat : {d['doms'][0]})")
     lines += ["", "## Faisceaux par phare", ""]
     for b in names:
         attached = [t for t, d in ideas.items() if d["beacon"] == b]

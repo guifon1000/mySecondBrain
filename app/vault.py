@@ -88,16 +88,18 @@ def _piece_name(item) -> str | None:
 
 
 def _copy_piece(item) -> str | None:
-    """Copie la pièce jointe (image/pdf) dans myVault/pieces/ — nom unique
-    (horodaté) garanti par l'archivage. Retourne le nom pour l'embed."""
+    """Copie la pièce jointe dans la bibliothèque humaine du vault
+    (myVault/biblio/pdf/ ou /img/ — noms d'origine). Retourne le nom
+    pour l'embed (Obsidian résout par nom, quel que soit le sous-dossier)."""
     name = _piece_name(item)
     if not name:
         return None
-    pieces = _vault_subdir(config.VAULT_PIECES_DIR)
-    if pieces is None:
+    sub = "pdf" if Path(name).suffix.lower() == ".pdf" else "img"
+    biblio = _vault_subdir(f"{config.VAULT_BIBLIO_DIR}/{sub}")
+    if biblio is None:
         return None
     src = Path(item["source_path"])
-    dest = pieces / name
+    dest = biblio / name
     if not dest.exists() and src.exists():
         shutil.copy2(src, dest)
     return name

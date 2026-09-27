@@ -119,7 +119,7 @@ VAULT_PROJECTS_DIR = os.getenv("SB_VAULT_PROJECTS_DIR", "Projets")
 VAULT_CAPS_DIR = os.getenv("SB_VAULT_CAPS_DIR", "Casquettes")
 VAULT_INBOX_DIR = os.getenv("SB_VAULT_INBOX_DIR", "Inbox")
 VAULT_ARCHIVE_DIR = os.getenv("SB_VAULT_ARCHIVE_DIR", "Archives")
-VAULT_PIECES_DIR = os.getenv("SB_VAULT_PIECES_DIR", "pieces")  # pièces jointes (images, pdf)
+VAULT_BIBLIO_DIR = os.getenv("SB_VAULT_BIBLIO_DIR", "biblio")  # bibliothèque humaine : pdf/, img/
 
 # --- OCR ------------------------------------------------------------------
 OCR_LANG = os.getenv("SB_OCR_LANG", "fra+eng")

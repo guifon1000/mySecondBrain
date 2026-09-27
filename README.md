@@ -34,11 +34,25 @@ Interface : http://localhost:8420
    démarrage (rattrapage) : texte extrait (pypdf pour les PDF), inbox. Extension blanchie (pdf, py, md, txt, ts...).
 5. **Vault Obsidian** (`myVault/`) : chaque projet créé pendant le tri génère
    un stub dans `myVault/Projets/`, et **chaque item enrichi crée une note
-   dans `myVault/Inbox/`** (image embarquée, URL, extrait). Lier l'item
-   déplace sa note vers `Projets/<projet>/`, archiver vers `Archives/` —
-   tes annotations dans les notes sont préservées. Tu peux donc *voir* le
-   rituel depuis Obsidian. Seule la ligne `description:` des fichiers projet
+   dans `myVault/Inbox/`** (image/PDF embarqué depuis `myVault/biblio/`,
+   URL, extrait). Lier l'item déplace sa note vers `Projets/<projet>/` ou
+   `Casquettes/<casquette>/`, archiver vers `Archives/` — tes annotations
+   sont préservées. Seule la ligne `description:` des fichiers projet/casquette
    est relue. L'app ne réécrit jamais tes fichiers.
+
+   Organisation du vault :
+   ```
+   myVault/
+     Inbox/        # notes des items à trier (l'inbox unique)
+     Projets/      # stubs + notes liées des projets
+     Casquettes/   # stubs + notes liées des casquettes
+     Archives/     # notes des items archivés
+     Idees/        # la pouponnière : atomiques/ · satellites/ · archive/
+                   #   + 00-Convention, Couvées, Galaxie (générée)
+     biblio/       # la bibliothèque humaine : pdf/ et img/ (noms d'origine)
+     _sources/     # fiches de lecture (exclues d'Obsidian)
+     Notes/        # notes libres (ex. Vestiges RAG)
+   ```
 6. **Projet de code lié** : sur la page d'un projet, colle le chemin d'un
    dossier de code (`C:\code\mon-depot`) → l'app scanne ses fichiers `.md`
    (README, docs) et son historique git récent, et stocke le texte en base.

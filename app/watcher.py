@@ -103,7 +103,7 @@ def ingest_file(src: Path) -> None:
     enrich.enqueue(item_id)
     if from_vault_inbox:
         # L'inbox du vault ne contient que des notes : le fichier déposé
-        # rejoint pieces/ (l'archive en garde une copie canonique).
+        # rejoint la bibliothèque biblio/ (l'archive en garde une copie canonique).
         _remove_from_vault_inbox(src, digest)
     log.info("ingéré : %s -> %s", name, dest.name)
 
@@ -117,17 +117,18 @@ def _is_vault_inbox(path: Path) -> bool:
 
 
 def _remove_from_vault_inbox(src: Path, digest: str) -> None:
-    """Sort le fichier déposé de l'inbox vault : déplacé vers pieces/
-    (même nom si libre, sinon préfixe horodaté) ; supprimé si une copie
-    identique y figure déjà."""
-    pieces = Path(config.VAULT_DIR) / config.VAULT_PIECES_DIR
-    pieces.mkdir(parents=True, exist_ok=True)
-    dest = pieces / src.name
+    """Sort le fichier déposé de l'inbox vault : déplacé vers la bibliothèque
+    biblio/{pdf,img}/ (même nom si libre, sinon préfixe horodaté) ; supprimé
+    si une copie identique y figure déjà."""
+    sub = "pdf" if src.suffix.lower() == ".pdf" else "img"
+    biblio = Path(config.VAULT_DIR) / config.VAULT_BIBLIO_DIR / sub
+    biblio.mkdir(parents=True, exist_ok=True)
+    dest = biblio / src.name
     if dest.exists():
         if enrich.sha256_file(dest) == digest:
             src.unlink(missing_ok=True)
             return
-        dest = pieces / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{src.name}"
+        dest = biblio / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{src.name}"
     try:
         shutil.move(str(src), str(dest))
     except OSError:
