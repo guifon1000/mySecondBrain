@@ -33,9 +33,12 @@ Interface : http://localhost:8420
    surveillé (ou un dossier dédié via `SB_WATCH_DIRS`) — ils sont ingérés au
    démarrage (rattrapage) : texte extrait (pypdf pour les PDF), inbox. Extension blanchie (pdf, py, md, txt, ts...).
 5. **Vault Obsidian** (`myVault/`) : chaque projet créé pendant le tri génère
-   un stub dans `myVault/Projets/`. Écris librement dedans ; seule la ligne
-   `description:` du frontmatter est relue. L'app ne réécrit jamais tes
-   fichiers — renomme, déplace, lie des notes comme tu veux.
+   un stub dans `myVault/Projets/`, et **chaque item enrichi crée une note
+   dans `myVault/Inbox/`** (image embarquée, URL, extrait). Lier l'item
+   déplace sa note vers `Projets/<projet>/`, archiver vers `Archives/` —
+   tes annotations dans les notes sont préservées. Tu peux donc *voir* le
+   rituel depuis Obsidian. Seule la ligne `description:` des fichiers projet
+   est relue. L'app ne réécrit jamais tes fichiers.
 6. **Projet de code lié** : sur la page d'un projet, colle le chemin d'un
    dossier de code (`C:\code\mon-depot`) → l'app scanne ses fichiers `.md`
    (README, docs) et son historique git récent, et stocke le texte en base.

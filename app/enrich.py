@@ -108,6 +108,14 @@ def _enrich_item(item_id: int) -> None:
             "UPDATE items SET ocr_text = ?, title = ?, ingest_done = 1 WHERE id = ?",
             (ocr_text, title, item_id),
         )
+        # Note inbox dans le vault (si le vault existe)
+        try:
+            from . import vault
+
+            item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+            vault.create_item_note(conn, item)
+        except Exception:
+            log.exception("note vault non créée pour l'item %s", item_id)
 
 
 def _worker_loop() -> None:

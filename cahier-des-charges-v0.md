@@ -48,12 +48,22 @@ doit pas compliquer le démarrage.
 | `note` | bouton "＋ Texte/code" dans l'UI (coller un snippet, une pensée) | le texte lui-même |
 | `file` | PDF, code, markdown... déposé dans un dossier surveillé | texte extrait (pypdf pour les PDF, lecture directe pour le texte) — extension blanchie | items déjà présents au premier lancement (dossiers existants), y compris le stock d'archives passées, sont ingérés au démarrage (rattrapage). C'est le canal pour backfiller "les tas de choses qui m'ont intéressé par le passé".
 
+- `myVault/Inbox/` — **une note par item en attente de tri**, tenue par l'app :
+  image embarquée (copiée dans `myVault/pieces/`), URL, extrait de texte.
+  Lier l'item déplace sa note vers `Projets/<projet>/`, archiver vers
+  `Archives/` — le frontmatter est mis à jour, le corps (tes annotations)
+  est préservé. Voir le vault dans Obsidian, trier dans l'UI.
+
 ## Vault Obsidian (pont unidirectionnel, option A)
 
 `myVault/` est l'espace d'écriture ; la DB reste la source de vérité du pipeline.
 
 - À la création d'un projet (touche `C` pendant le tri), l'app crée un stub
   `myVault/Projets/<slug>.md` avec frontmatter `id`, `description`, `created`.
+- Une note d'inbox est créée pour chaque item enrichi (frontmatter `sb_id`,
+  `status`), déplacée selon le statut (liée → `Projets/<slug>/`, archivée →
+  `Archives/`). Ces notes sont des **artefacts app** : l'app les crée,
+  déplace et met à jour leur frontmatter, mais préserve leur corps.
 - L'app ne réécrit **jamais** un fichier existant. Renommer ou déplacer le
   fichier dans Obsidian ne casse rien (lien par `id:` frontmatter).
 - L'app ne relit que le frontmatter : `description` sert de descriptif du
@@ -157,6 +167,7 @@ Table **items** :
 | `status` | inbox / archived / linked |
 | `linked_project_id` | projet associé si lié |
 | `ingest_done` | 0 = en attente d'enrichissement, 1 = traité |
+| `vault_note` | chemin de la note inbox vault (si le vault existe) |
 
 Table **projects** : `id`, `title`, `description`, `created_at`, `vault_path`, `vault_mtime` (pont vault, option A), `code_path`, `code_scan_at`, `code_scan_text` (dépôt de code lié). La colonne `embedding` reste (NULL, usage futur).
 

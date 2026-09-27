@@ -123,6 +123,9 @@ def init_db() -> None:
             name = col.split()[0]
             if name not in cols:
                 conn.execute(f"ALTER TABLE projects ADD COLUMN {col}")
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(items)")}
+        if "vault_note" not in cols:
+            conn.execute("ALTER TABLE items ADD COLUMN vault_note TEXT")
 
 
 # --- Requêtes utilitaires ---------------------------------------------------

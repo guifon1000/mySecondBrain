@@ -66,6 +66,12 @@ def _link_item(item_id: int, project_id: int, session_id: int) -> None:
             "AND project_id = ? AND action = 'shown'",
             (item_id, project_id),
         )
+        try:
+            item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+            p = db.project(conn, project_id)
+            vault.move_item_note(conn, item, "linked", p["title"] if p else "")
+        except Exception:
+            log.exception("déplacement note vault échoué (item %s)", item_id)
 
 
 def _archive_item(item_id: int, session_id: int) -> None:
@@ -76,6 +82,11 @@ def _archive_item(item_id: int, session_id: int) -> None:
             "archived = archived + 1 WHERE id = ?",
             (session_id,),
         )
+        try:
+            item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+            vault.move_item_note(conn, item, "archived")
+        except Exception:
+            log.exception("déplacement note vault échoué (item %s)", item_id)
 
 
 def _create_project_with_item(title: str, description: str, item_id: int,
