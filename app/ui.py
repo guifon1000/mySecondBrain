@@ -23,19 +23,6 @@ log = logging.getLogger("ui")
 
 # --- Utilitaires ------------------------------------------------------------
 
-def _vec(blob):
-    return None if not blob else np.frombuffer(blob, dtype=np.float32)
-
-
-def _cosine(a, b):
-    if a is None or b is None:
-        return None
-    na, nb = np.linalg.norm(a), np.linalg.norm(b)
-    if na == 0 or nb == 0:
-        return None
-    return float(np.dot(a, b) / (na * nb))
-
-
 def _archive_url(item) -> str | None:
     if not item["source_path"]:
         return None
@@ -64,29 +51,6 @@ def _stats() -> dict:
 
 # --- Actions de tri ----------------------------------------------------------
 
-def _log_top_scores(conn, item_id: int) -> None:
-    """Journalise les scores item x projet pour calibrer le seuil plus tard."""
-    item = conn.execute("SELECT embedding FROM items WHERE id = ?", (item_id,)).fetchone()
-    i_vec = _vec(item["embedding"] if item else None)
-    if i_vec is None:
-        return
-    for p in db.all_projects(conn):
-        score = _cosine(i_vec, _vec(p["embedding"]))
-        if score is None:
-            continue
-        already = conn.execute(
-            "SELECT 1 FROM suggestion_log WHERE item_id = ? AND project_id = ? "
-            "AND action = 'shown'",
-            (item_id, p["id"]),
-        ).fetchone()
-        if not already:
-            conn.execute(
-                "INSERT INTO suggestion_log (item_id, project_id, score, action) "
-                "VALUES (?, ?, ?, 'shown')",
-                (item_id, p["id"], score),
-            )
-
-
 def _link_item(item_id: int, project_id: int, session_id: int) -> None:
     with db.db() as conn:
         conn.execute(
@@ -103,7 +67,6 @@ def _link_item(item_id: int, project_id: int, session_id: int) -> None:
             "AND project_id = ? AND action = 'shown'",
             (item_id, project_id),
         )
-        enrich.recompute_project_embedding(conn, project_id)
 
 
 def _archive_item(item_id: int, session_id: int) -> None:
@@ -132,7 +95,6 @@ def _create_project_with_item(title: str, description: str, item_id: int,
             "linked = linked + 1, projects_created = projects_created + 1 WHERE id = ?",
             (session_id,),
         )
-        enrich.recompute_project_embedding(conn, project_id)
         try:
             stub = vault.create_project_stub(project_id, title, description)
             if stub:
@@ -169,7 +131,7 @@ def tri_page():
     # Pont vault (option A) + rafraîchissement des dépôts de code liés
     try:
         with db.db() as conn:
-            vault.sync_project_embeddings(conn)
+            vault.sync_projects(conn)
     except Exception:
         log.exception("sync vault ignorée (erreur)")
     try:
@@ -301,30 +263,14 @@ def tri_page():
                 ui.label(item["title"]).classes("text-lg font-semibold")
             if item["url"]:
                 ui.link(item["url"], item["url"]).classes("text-blue-400 break-all")
-            if item["vision_description"]:
-                ui.label(item["vision_description"]).classes("italic opacity-80")
             if item["ocr_text"]:
                 with ui.scroll_area().classes("max-h-40 w-full"):
                     ui.label(item["ocr_text"]).classes("whitespace-pre-wrap text-sm")
             if not (url or item["url"] or item["ocr_text"] or item["title"]):
                 ui.label("(item sans contenu exploitable)").classes("opacity-50")
-
-            # Suggestions : désactivées tant que le seuil n'est pas calibré (v0.1)
-            if config.SUGGEST_THRESHOLD is not None and projects:
-                i_vec = _vec(item["embedding"])
-                scored = sorted(
-                    ((p, _cosine(i_vec, _vec(p["embedding"]))) for p in projects),
-                    key=lambda t: -(t[1] or 0),
-                )
-                best = scored[0] if scored else None
-                if best and best[1] is not None and best[1] >= config.SUGGEST_THRESHOLD:
-                    ui.separator()
-                    ui.badge(
-                        f"Suggéré : {best[0]['title']} (score {best[1]:.2f})"
-                    ).color("amber")
-
-            with db.db() as conn:
-                _log_top_scores(conn, item["id"])
+            # Suggestions : pas d'IA embarquée dans l'app — elles viennent de
+            # l'agent Pi dédié au projet, à la demande (lecture de la base,
+            # proposition, validation humaine ici via touches 1-9).
 
     def advance():
         state["index"] += 1
@@ -358,8 +304,8 @@ def tri_page():
         with db.db() as conn:
             conn.execute(
                 "UPDATE suggestion_log SET action = 'rejected' WHERE item_id = ? "
-                "AND action = 'shown' AND score >= ?",
-                (item_id, config.SUGGEST_THRESHOLD or 0),
+                "AND action = 'shown'",
+                (item_id,),
             )
         ui.notify("Suggestion rejetée")
         advance()
@@ -397,7 +343,7 @@ def tri_page():
             do_archive()
         elif e.key.name.lower() == "c":
             open_create_dialog()
-        elif e.key.name.lower() == "s" and config.SUGGEST_THRESHOLD is not None:
+        elif e.key.name.lower() == "s":
             do_reject_suggestion()
         elif e.key.space or e.key.name == "ArrowRight":
             advance()
@@ -497,10 +443,7 @@ def project_page(project_id: int):
                             "UPDATE projects SET code_path = ? WHERE id = ?",
                             (path or None, project_id),
                         )
-                        if path:
-                            n = codeproject.recompute_embedding(conn, project_id)
-                        else:
-                            n = -1
+                        n = codeproject.link_and_scan(conn, project_id, path) if path else -1
                     if path and n >= 0:
                         ui.notify(f"Dépôt lié — {n} fichiers md scannés", type="positive")
                     elif path:
@@ -537,8 +480,5 @@ def project_page(project_id: int):
                             preview = item["ocr_text"][:200]
                             suffix = "…" if len(item["ocr_text"]) > 200 else ""
                             ui.label(preview + suffix).classes("text-sm opacity-70")
-                        if item["vision_description"]:
-                            ui.label(item["vision_description"]).classes(
-                                "text-sm italic opacity-70")
                         ui.label(item["created_at"]).classes("text-xs opacity-40")
         ui.link("← Mes projets", "/projects").classes("text-blue-400 mt-4")

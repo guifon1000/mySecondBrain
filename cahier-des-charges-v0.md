@@ -56,9 +56,9 @@ doit pas compliquer le démarrage.
   `myVault/Projets/<slug>.md` avec frontmatter `id`, `description`, `created`.
 - L'app ne réécrit **jamais** un fichier existant. Renommer ou déplacer le
   fichier dans Obsidian ne casse rien (lien par `id:` frontmatter).
-- L'app ne relit que le frontmatter : `description` sert d'embedding du projet
-  tant qu'il n'a pas d'items liés ; ensuite l'embedding vient des items. La
-  relecture est déclenchée au chargement de la page de tri (détection mtime).
+- L'app ne relit que le frontmatter : `description` sert de descriptif du
+  projet (que l'agent Pi lit) ; la relecture est déclenchée au chargement de
+  la page de tri (détection mtime).
 - Le contenu libre du fichier projet (tes notes, tes connexions) n'est jamais
   parsé — c'est ton espace.
 
@@ -68,37 +68,43 @@ doit pas compliquer le démarrage.
 2. **Le watcher COPIE le fichier hors du dossier source** vers un dossier d'archives interne (`data/archives/`). Jamais de référence directe vers un fichier du dossier source : si l'utilisateur supprime une capture, l'archive doit survivre.
 3. **Déduplication** par hash SHA-256 du fichier (ou de l'URL pour les bookmarks) : un doublon est ignoré silencieusement.
 4. OCR sur les images (`pytesseract` / Tesseract, langue `fra+eng`). Si le texte extrait est trop court (< ~20 caractères), l'item est marqué "photo sans texte" et passe au modèle vision s'il est activé.
-5. Description optionnelle des photos non textuelles via un modèle vision **OpenRouter** (ex. `google/gemini-2.5-flash`). **Désactivé par défaut** (coût par photo) — option activable sans changement de code.
+5. Description optionnelle des photos non textuelles : pas de vision embarquée — l'agent Pi peut décrire une photo à la demande (il lit l'archive).
 6. Pour les bookmarks : récupération du titre via oEmbed quand disponible (YouTube : oui ; X : pas d'oEmbed public fiable → on affiche l'URL brute, pas de promesse de preview au-delà). Pas de scraping lourd en v0.
-7. Embedding du contenu textuel (OCR + description + URL + titre) via l'endpoint embeddings d'**OpenRouter** (une clé API, modèle au choix, ex. `openai/text-embedding-3-small`). Sans clé ou en cas d'erreur, l'item est ingéré **sans embedding** et reste triable manuellement — la capture ne doit jamais échouer parce que l'API est down.
+7. **Aucun embedding, aucun appel IA** : l'enrichissement est purement local (oEmbed, extraction de texte, OCR optionnel). La sémantique est déléguée à l'agent Pi dédié au projet.
 
-**Choix IA** : pas de modèle local. Une clé OpenRouter, un modèle par tâche (`SB_EMBED_MODEL`, `SB_VISION_MODEL`, `SB_TEXT_MODEL`), changeables sans toucher au code.
-8. **Burst initial toléré** : le traitement (OCR, embedding) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux massif au premier lancement (rattrapage des dossiers existants) ralentit l'enrichissement, jamais la capture ni le tri.
+**Choix IA** : pas de modèle local, pas de clé API dans l'app. L'agent Pi (session dédiée à ce projet) fait le travail sémantique à la demande, en lisant la base. Un humain valide toujours tout lien.
+8. **Burst initial toléré** : le traitement (OCR, extraction) se fait dans une file d'arrière-plan, pas dans le chemin de capture. Un afflux massif au premier lancement (rattrapage des dossiers existants) ralentit l'enrichissement, jamais la capture ni le tri.
 
 ## Projets
 
-- Table `projects` : `id`, `title`, `description` (courte, optionnelle), `embedding`, `created_at`.
-- L'embedding d'un projet est **la moyenne des embeddings de ses items liés** tant qu'il en a ; sinon celui de `title + description`. Recalculé à chaque lien validé.
+- Table `projects` : `id`, `title`, `description` (courte, optionnelle), `created_at`, `vault_path`, `code_path`.
 - Création de projet possible à tout moment : à l'ingestion (pas nécessaire), et pendant le tri (action "Créer un projet", avec lien immédiat de l'item courant).
 - Le scoring porte sur la liste des projets existants **au moment de l'affichage** — la création d'un nouveau projet est toujours permise et n'est pas une "découverte ouverte".
 
 - **Ancrage à un dépôt de code** : sur la page projet, un champ permet de
   lier un dossier local (ex. `C:\code\mon-projet`). L'app y scanne — jamais
-  le code lui-même — les fichiers `*.md` (README, docs...) et l'historique
+  le code lui-même — les fichiers `*.md` (README, docs) et l'historique
   git récent (`git log --oneline -40`), tout plafonné (30 fichiers,
-  600 car/fichier). Le scan alimente l'embedding du projet : une capture
-  d'erreur, un bookmark de lib ou un snippet peuvent alors être suggérés
-  (puis, un jour, liés manuellement) vers le bon dépôt. Rescan auto 24 h au
-  chargement du tri ; les projets avec items liés mélangent 70 % items /
-  30 % dépôt.
+  600 car/fichier). Le texte scanné est stocké en base (`code_scan_text`) :
+  c'est la matière que l'agent Pi lit pour suggérer des liens. Rescan auto
+  24 h au chargement du tri.
 
-## Suggestions de lien
+## IA : aucune embarquée — l'agent Pi fait le sémantique
 
-Le mécanisme existe dans le code (similarité cosinus item ↔ projet, seuil configurable), mais :
+L'app n'appelle **aucun modèle** (ni local, ni API). Le travail sémantique est
+confié à l'**agent Pi dédié au projet**, à la demande :
 
-- **Désactivé au démarrage** (seuil = null). Les liens se font manuellement : "Lier à un projet" via un sélecteur.
-- Le seuil n'est introduit qu'après avoir observé la distribution réelle des scores pendant au moins une semaine d'usage (les scores sont journalisés dans `suggestion_log` pour permettre ce calibrage).
-- Un rejet de suggestion est journalisé et la paire item/projet n'est plus suggérée.
+- il lit directement la base SQLite (`data/secondbrain.db`) : items en inbox,
+  OCR/titres, descriptions de projets, textes de scan des dépôts ;
+- il propose des liens item ↔ projet en langage naturel ;
+- la validation reste humaine : dans l'UI (touches 1-9) ou via lui ;
+- les colonnes `embedding` restent NULL (schéma préservé pour un usage futur).
+
+Conséquences :
+- zéro clé API, zéro service IA à maintenir dans le code ;
+- la section "Suggestions de lien" (seuil, calibrage, suggestion_log) devient
+  **hors scope v0** : les suggestions viennent d'une conversation avec
+  l'agent, pas d'un calcul embarqué.
 
 ## Tri quotidien
 
@@ -125,9 +131,9 @@ Le tri ne doit pas être qu'une corvée de soustraction. Dès v0 :
 - **API + UI** : FastAPI (endpoint de réception des bookmarks) avec NiceGUI monté dessus — **un seul processus** : API, watcher, enrichissement, tri. Moins de services, moins de choses qui cassent.
 - **Watcher** : `watchdog`, thread dans le même processus.
 - **OCR** : `pytesseract` (dégradation gracieuse si Tesseract absent).
-- **Vision (option)** : modèle vision OpenRouter, désactivé par défaut.
-- **Embeddings** : endpoint embeddings OpenRouter — pas de modèle local, pas de dépendance PyTorch.
-- **Métadonnées + vecteurs** : **SQLite unique** — les embeddings sont stockés en BLOB dans la table, similarité calculée en numpy (volumétrie personnelle : quelques milliers d'items, un produit matriciel suffit). **Pas de ChromaDB ni de service vectoriel séparé.**
+- **Vision (option)** : supprimée — l'agent peut décrire une photo si on lui demande.
+- **Embeddings** : supprimés — colonnes conservées (NULL) pour un usage futur.
+- **Métadonnées** : **SQLite unique**, pas de service séparé, pas de ChromaDB.
 - **Conteneurisation** : hors scope. Un process local suffit.
 - **Réseau** : tout en local (`127.0.0.1` par défaut). Pas de Tailscale, pas d'exposition, pas de certificats.
 - **Sauvegarde** : le dossier `data/` (SQLite + archives) est le seul état du système ; copie simple documentée dans le README.
@@ -152,8 +158,8 @@ Table **items** :
 | `linked_project_id` | projet associé si lié |
 | `ingest_done` | 0 = en attente d'enrichissement, 1 = traité |
 
-Table **projects** : `id`, `title`, `description`, `embedding` (BLOB), `created_at`, `vault_path`, `vault_mtime` (pont vault, option A), `code_path`, `code_scan_at` (dépôt de code lié).
+Table **projects** : `id`, `title`, `description`, `created_at`, `vault_path`, `vault_mtime` (pont vault, option A), `code_path`, `code_scan_at`, `code_scan_text` (dépôt de code lié). La colonne `embedding` reste (NULL, usage futur).
 
 Table **sessions** : `id`, `started_at`, `ended_at`, `items_reviewed`, `archived`, `linked`, `projects_created`.
 
-Table **suggestion_log** : `item_id`, `project_id`, `score`, `action` (shown / accepted / rejected), `ts` — sert au calibrage du seuil.
+Table **suggestion_log** : conservée (historique des liens proposés par l'agent et acceptés/rejetés), sans calcul de score embarqué.

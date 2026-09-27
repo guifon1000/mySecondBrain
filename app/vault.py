@@ -90,22 +90,17 @@ def read_frontmatter(path: Path) -> dict:
     return out
 
 
-def sync_project_embeddings(conn: sqlite3.Connection) -> None:
-    """Appelé au chargement de la page de tri : si la description d'un projet
-    a changé dans le vault (mtime), recalcule son embedding (via description
-    uniquement pour les projets sans items liés).
+def sync_projects(conn: sqlite3.Connection) -> None:
+    """Appelé au chargement de la page de tri : relit le frontmatter des fichiers
+    projet du vault et met à jour la colonne `description` de la DB. Pas d'IA,
+    pas d'embedding — juste garder la DB alignée avec ce que tu écris.
     """
-    from . import db, enrich
-
     d = projects_dir()
     if d is None:
         return
+    from . import db
+
     for p in db.all_projects(conn):
-        count = conn.execute(
-            "SELECT COUNT(*) c FROM items WHERE linked_project_id = ?", (p["id"],)
-        ).fetchone()["c"]
-        if count > 0:
-            continue  # l'embedding vient des items — le vault n'a plus rien à dire
         fpath = Path(p["vault_path"]) if p["vault_path"] else None
         if fpath is None or not fpath.is_file():
             # cherche par id si le fichier a été renommé dans Obsidian
@@ -115,23 +110,29 @@ def sync_project_embeddings(conn: sqlite3.Connection) -> None:
                     break
             if fpath is None:
                 continue
+            conn.execute(
+                "UPDATE projects SET vault_path = ? WHERE id = ?", (str(fpath), p["id"])
+            )
         try:
             mtime = fpath.stat().st_mtime
         except OSError:
             continue
         stored = conn.execute(
-            "SELECT vault_mtime FROM projects WHERE id = ?", (p["id"],)
+            "SELECT vault_mtime, description FROM projects WHERE id = ?", (p["id"],)
         ).fetchone()
-        stored_mtime = stored["vault_mtime"] if stored else None
-        if stored_mtime is not None and abs(mtime - stored_mtime) < 1:
+        if stored and stored["vault_mtime"] is not None and abs(mtime - stored["vault_mtime"]) < 1:
             continue
         fm = read_frontmatter(fpath)
         if fm.get("id") != p["id"]:
             continue
         desc = fm.get("description", "").strip()
-        vec = enrich._embed_sync(f"{fpath.stem} {desc}")
-        conn.execute(
-            "UPDATE projects SET embedding = ?, vault_mtime = ? WHERE id = ?",
-            (vec.tobytes() if vec is not None else None, mtime, p["id"]),
-        )
-        log.info("embedding projet %s recalculé depuis le vault", p["id"])
+        if desc != (stored["description"] if stored else ""):
+            conn.execute(
+                "UPDATE projects SET description = ?, vault_mtime = ? WHERE id = ?",
+                (desc, mtime, p["id"]),
+            )
+            log.info("description du projet %s synchronisée depuis le vault", p["id"])
+        else:
+            conn.execute(
+                "UPDATE projects SET vault_mtime = ? WHERE id = ?", (mtime, p["id"])
+            )
