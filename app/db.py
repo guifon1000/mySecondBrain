@@ -116,10 +116,13 @@ def init_db() -> None:
     with db() as conn:
         _migrate(conn)
         conn.executescript(SCHEMA)
-        # Colonne vault_path sur projects (ajout incrémental)
+        # Ajouts incrémentaux. La table projects sert pour les projets ET les
+        # casquettes (rôles durables) : colonne kind ('projet' | 'casquette').
+        # Tout le reste (liens, vault, sessions) est partagé.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
         for col in ("vault_path TEXT", "vault_mtime REAL", "code_path TEXT",
-                    "code_scan_at TEXT", "code_scan_text TEXT"):
+                    "code_scan_at TEXT", "code_scan_text TEXT",
+                    "kind TEXT NOT NULL DEFAULT 'projet'"):
             name = col.split()[0]
             if name not in cols:
                 conn.execute(f"ALTER TABLE projects ADD COLUMN {col}")
@@ -135,13 +138,14 @@ def project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.Row]:
 
 
 def all_projects(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Projets ET casquettes — casquettes d'abord (ce sont les rôles durables)."""
     return conn.execute(
         """SELECT p.*, COUNT(i.id) AS item_count,
                   (SELECT COUNT(*) FROM items i2
                    WHERE i2.linked_project_id = p.id
                      AND i2.created_at >= datetime('now', '-7 days')) AS items_this_week
            FROM projects p LEFT JOIN items i ON i.linked_project_id = p.id
-           GROUP BY p.id ORDER BY p.created_at"""
+           GROUP BY p.id ORDER BY (p.kind = 'casquette') DESC, p.created_at"""
     ).fetchall()
 
 

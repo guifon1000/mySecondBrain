@@ -132,7 +132,8 @@ def create_item_note(conn, item) -> Path | None:
     return path
 
 
-def move_item_note(conn, item, new_status: str, project_title: str = "") -> None:
+def move_item_note(conn, item, new_status: str, project_title: str = "",
+                   project_kind: str = "projet") -> None:
     """Déplace la note quand le statut change, frontmatter mis à jour,
     corps préservé (y compris d'éventuelles notes utilisateur)."""
     vault_root = Path(config.VAULT_DIR)
@@ -142,7 +143,7 @@ def move_item_note(conn, item, new_status: str, project_title: str = "") -> None
     if note is None or not note.is_file():
         # note renommée/perdue : on retente par sb_id dans les dossiers connus
         for folder in (config.VAULT_INBOX_DIR, config.VAULT_ARCHIVE_DIR,
-                       config.VAULT_PROJECTS_DIR):
+                       config.VAULT_PROJECTS_DIR, config.VAULT_CAPS_DIR):
             base = vault_root / folder
             if base.is_dir():
                 for cand in base.rglob("*.md"):
@@ -154,7 +155,8 @@ def move_item_note(conn, item, new_status: str, project_title: str = "") -> None
         if note is None:
             return
     target_dir = (
-        vault_root / config.VAULT_PROJECTS_DIR / slugify(project_title)
+        vault_root / (config.VAULT_PROJECTS_DIR if project_kind == "projet"
+                      else config.VAULT_CAPS_DIR) / slugify(project_title)
         if new_status == "linked" and project_title
         else vault_root / config.VAULT_ARCHIVE_DIR
     )
@@ -168,9 +170,11 @@ def move_item_note(conn, item, new_status: str, project_title: str = "") -> None
     conn.execute("UPDATE items SET vault_note = ? WHERE id = ?", (str(target), item["id"]))
 
 
-def create_project_stub(project_id: int, title: str, description: str) -> Path | None:
-    """Crée le fichier projet s'il n'existe pas. Idempotent, jamais destructif."""
-    d = projects_dir()
+def create_project_stub(project_id: int, title: str, description: str,
+                        kind: str = "projet") -> Path | None:
+    """Crée le fichier projet/casquette s'il n'existe pas. Idempotent."""
+    folder = config.VAULT_PROJECTS_DIR if kind == "projet" else config.VAULT_CAPS_DIR
+    d = _vault_subdir(folder)
     if d is None:
         return None
     path = d / f"{slugify(title)}.md"

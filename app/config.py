@@ -116,6 +116,7 @@ PORT = int(os.getenv("SB_PORT", "8420"))
 # frontmatter (id, description) — elle ne réécrit jamais le fichier.
 VAULT_DIR = _path("SB_VAULT_DIR", ROOT / "myVault")
 VAULT_PROJECTS_DIR = os.getenv("SB_VAULT_PROJECTS_DIR", "Projets")
+VAULT_CAPS_DIR = os.getenv("SB_VAULT_CAPS_DIR", "Casquettes")
 VAULT_INBOX_DIR = os.getenv("SB_VAULT_INBOX_DIR", "Inbox")
 VAULT_ARCHIVE_DIR = os.getenv("SB_VAULT_ARCHIVE_DIR", "Archives")
 VAULT_PIECES_DIR = os.getenv("SB_VAULT_PIECES_DIR", "pieces")  # pièces jointes (images, pdf)

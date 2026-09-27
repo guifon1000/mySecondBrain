@@ -69,7 +69,8 @@ def _link_item(item_id: int, project_id: int, session_id: int) -> None:
         try:
             item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
             p = db.project(conn, project_id)
-            vault.move_item_note(conn, item, "linked", p["title"] if p else "")
+            vault.move_item_note(conn, item, "linked",
+                                 p["title"] if p else "", p["kind"] if p else "projet")
         except Exception:
             log.exception("déplacement note vault échoué (item %s)", item_id)
 
@@ -90,10 +91,11 @@ def _archive_item(item_id: int, session_id: int) -> None:
 
 
 def _create_project_with_item(title: str, description: str, item_id: int,
-                              session_id: int) -> int:
+                              session_id: int, kind: str = "projet") -> int:
     with db.db() as conn:
         cur = conn.execute(
-            "INSERT INTO projects (title, description) VALUES (?, ?)", (title, description)
+            "INSERT INTO projects (title, description, kind) VALUES (?, ?, ?)",
+            (title, description, kind),
         )
         project_id = cur.lastrowid
         conn.execute(
@@ -106,7 +108,7 @@ def _create_project_with_item(title: str, description: str, item_id: int,
             (session_id,),
         )
         try:
-            stub = vault.create_project_stub(project_id, title, description)
+            stub = vault.create_project_stub(project_id, title, description, kind)
             if stub:
                 conn.execute(
                     "UPDATE projects SET vault_path = ? WHERE id = ?",
@@ -303,13 +305,14 @@ def tri_page():
         _link_item(items[state["index"]]["id"], projects[idx]["id"], state["session_id"])
         advance()
 
-    def do_create_project(title: str):
+    def do_create_project(title: str, kind: str = "projet"):
         if state["done"] or not title.strip():
             return
         _create_project_with_item(
-            title.strip(), "", items[state["index"]]["id"], state["session_id"]
+            title.strip(), "", items[state["index"]]["id"], state["session_id"], kind
         )
-        ui.notify(f"Projet « {title.strip()} » créé", type="positive")
+        ui.notify(f"{'Casquette' if kind == 'casquette' else 'Projet'} « {title.strip()} » créé",
+                  type="positive")
         advance()
 
     def do_reject_suggestion():
@@ -328,16 +331,22 @@ def tri_page():
     def open_create_dialog():
         state["dialog_open"] = True
         with ui.dialog() as dlg, ui.card():
-            ui.label("Nouveau projet").classes("text-lg")
+            ui.label("Nouveau").classes("text-lg")
             inp = ui.input("Titre").classes("w-full")
+            kind_sel = ui.toggle({"projet": "Projet", "casquette": "Casquette"},
+                                 value="projet")
             with ui.row():
                 ui.button(
                     "Créer et lier",
-                    on_click=lambda: (dlg.close(), do_create_project(inp.value)),
+                    on_click=lambda: (
+                        dlg.close(),
+                        do_create_project(inp.value, kind_sel.value),
+                    ),
                 )
                 ui.button("Annuler", on_click=dlg.close).props("flat")
         dlg.on("hide", lambda: state.update(dialog_open=False))
-        inp.on("keydown.enter", lambda: (dlg.close(), do_create_project(inp.value)))
+        inp.on("keydown.enter", lambda: (
+            dlg.close(), do_create_project(inp.value, kind_sel.value)))
         dlg.open()
         ui.run_javascript(
             "setTimeout(() => document.querySelector('.q-field input')?.focus(), 100)"
@@ -373,10 +382,12 @@ def tri_page():
 
     if projects and not state["done"]:
         with ui.column().classes("w-full max-w-3xl mx-auto p-2"):
-            ui.label("Projets (touches 1-9)").classes("text-sm opacity-60")
+            ui.label("Casquettes & projets (touches 1-9)").classes("text-sm opacity-60")
             for i, p in enumerate(projects[:9]):
                 with ui.row().classes("items-center gap-2 no-wrap"):
                     ui.badge(str(i + 1)).props("dense")
+                    if p["kind"] == "casquette":
+                        ui.badge("casquette").color("teal").props("dense")
                     ui.label(p["title"])
                     ui.label(f"({p['item_count']})").classes("opacity-50 text-sm")
 
@@ -385,7 +396,8 @@ def _empty_state():
     stats = _stats()
     ui.label("Inbox vide ✨").classes("text-2xl")
     ui.label(
-        "Le rituel reprendra quand Syncthing aura synchronisé de nouvelles captures."
+        "Le rituel reprendra avec la prochaine capture ou le prochain document "
+        "déposé dans inbox-docs/."
     ).classes("opacity-70")
     with ui.row().classes("mt-4 gap-6 items-center"):
         with ui.column():
@@ -410,21 +422,27 @@ def projects_page():
     with db.db() as conn:
         projects = db.all_projects(conn)
     with ui.column().classes("w-full max-w-3xl mx-auto gap-2 p-4"):
-        ui.label("Mes projets").classes("text-2xl")
+        ui.label("Mes casquettes & projets").classes("text-2xl")
         if not projects:
             ui.label(
-                "Aucun projet pour l'instant. Les projets naissent pendant le tri "
-                "(touche C) quand une capture ne correspond à rien."
+                "Aucun projet ni casquette pour l'instant. Ils naissent pendant le "
+                "tri (touche C) quand une capture ne correspond à rien."
             ).classes("opacity-70")
-        for p in projects:
-            with ui.card().classes("w-full") as proj_card:
-                with ui.row().classes("w-full items-center justify-between"):
-                    with ui.row().classes("items-center gap-2"):
-                        ui.label(p["title"]).classes("text-lg font-semibold")
-                        if p["items_this_week"]:
-                            ui.badge(f"+{p['items_this_week']} cette semaine").color("green")
-                    ui.label(f"{p['item_count']} items").classes("opacity-60")
-                proj_card.on("click", lambda _, pid=p["id"]: ui.navigate.to(f"/project/{pid}"))
+        for kind, label in (("casquette", "Casquettes — les rôles que tu portes"),
+                            ("projet", "Projets — ce que tu construis")):
+            group = [p for p in projects if p["kind"] == kind]
+            if not group:
+                continue
+            ui.label(label).classes("text-sm opacity-60 mt-2")
+            for p in group:
+                with ui.card().classes("w-full") as proj_card:
+                    with ui.row().classes("w-full items-center justify-between"):
+                        with ui.row().classes("items-center gap-2"):
+                            ui.label(p["title"]).classes("text-lg font-semibold")
+                            if p["items_this_week"]:
+                                ui.badge(f"+{p['items_this_week']} cette semaine").color("green")
+                        ui.label(f"{p['item_count']} items").classes("opacity-60")
+                    proj_card.on("click", lambda _, pid=p["id"]: ui.navigate.to(f"/project/{pid}"))
         ui.link("← Retour au tri", "/").classes("text-blue-400 mt-4")
 
 
