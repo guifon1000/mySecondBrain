@@ -6,3 +6,6 @@ __pycache__/
 server.log
 # Vault Obsidian — espace d'écriture personnel, hors git
 myVault/
+
+# Documents à ingérer — données personnelles, hors git
+inbox-docs/
