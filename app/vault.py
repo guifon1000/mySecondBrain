@@ -118,6 +118,20 @@ def _item_body(item) -> str:
     return "\n".join(lines)
 
 
+def ensure_inbox_notes(conn) -> None:
+    """Sécurité au chargement du tri : toute item inbox doit avoir sa note
+    vault (recréée si effacée/absente — opération idempotente)."""
+    d = _vault_subdir(config.VAULT_INBOX_DIR)
+    if d is None:
+        return
+    from . import db as _db
+
+    for r in conn.execute("SELECT * FROM items WHERE status = 'inbox'").fetchall():
+        note = Path(r["vault_note"]) if r["vault_note"] else None
+        if note is None or not note.is_file():
+            create_item_note(conn, r)
+
+
 def create_item_note(conn, item) -> Path | None:
     """Crée la note inbox d'un item (idempotent). Appelé après enrichissement."""
     d = _vault_subdir(config.VAULT_INBOX_DIR)

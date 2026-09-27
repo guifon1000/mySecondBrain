@@ -148,6 +148,11 @@ def tri_page():
         log.exception("sync vault ignorée (erreur)")
     try:
         with db.db() as conn:
+            vault.ensure_inbox_notes(conn)
+    except Exception:
+        log.exception("vérification notes inbox ignorée")
+    try:
+        with db.db() as conn:
             codeproject.rescan_stale(conn)
     except Exception:
         log.exception("rescan des dépôts de code ignoré")
