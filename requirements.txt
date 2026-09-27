@@ -6,3 +6,5 @@ numpy>=2.0
 pillow>=11.0
 pytesseract>=0.3.13
 requests>=2.32pypdf>=5.0
+matplotlib>=3.9
+networkx>=3.0
