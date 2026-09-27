@@ -79,12 +79,17 @@ def _watch_dirs() -> list[Path]:
     """
     raw = os.getenv("SB_WATCH_DIRS", "")
     if raw:
-        return [Path(p) for p in raw.split(";") if p]
-    if sys.platform.startswith("win"):
+        dirs = [Path(p) for p in raw.split(";") if p]
+    elif sys.platform.startswith("win"):
         dirs = _windows_capture_dirs()
-        if dirs:
-            return dirs
-    return [DATA_DIR / "watched"]
+    else:
+        dirs = []
+    # Le dossier d'ingestion de documents (PDF, code, md...) est toujours surveillé
+    docs = ROOT / "inbox-docs"
+    docs.mkdir(exist_ok=True)
+    if docs not in dirs:
+        dirs.append(docs)
+    return dirs if dirs else [DATA_DIR / "watched"]
 
 
 WATCH_DIRS = _watch_dirs()

@@ -266,9 +266,14 @@ def tri_page():
             if url and item["type"] in ("photo", "screenshot"):
                 ui.image(url).classes("max-h-96 w-auto")
             if item["type"] == "file" and url:
+                ext = Path(item["source_path"]).suffix.lower()
                 with ui.row().classes("items-center gap-2"):
-                    ui.badge(Path(item["source_path"]).suffix).color("purple")
+                    ui.badge(ext).color("purple")
                     ui.link("Ouvrir le fichier", url).classes("text-blue-400")
+                if ext == ".pdf" and not item["ocr_text"]:
+                    ui.badge(
+                        "PDF sans couche texte (scanné ?) — demande à l'agent de le lire"
+                    ).color("orange")
             if item["title"]:
                 ui.label(item["title"]).classes("text-lg font-semibold")
             if item["url"]:
