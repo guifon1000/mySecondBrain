@@ -297,7 +297,7 @@ def main():
 
     net = Network(height="850px", width="100%", bgcolor="#0d1b2a",
                   font_color="#dce8f5", select_menu=False,
-                  filter_menu=False)
+                  filter_menu=False, cdn_resources="remote")
     net.barnes_hut(gravity=-9000, spring_length=140, spring_strength=0.004,
                    damping=0.55)
 
