@@ -292,6 +292,63 @@ def main():
     OUT_NOTE.write_text(note, encoding="utf-8")
     print(f"note -> {OUT_NOTE}")
 
+    # --- version interactive (pyvis) : navigable, secouable -----------------
+    from pyvis.network import Network
+
+    net = Network(height="850px", width="100%", bgcolor="#0d1b2a",
+                  font_color="#dce8f5", select_menu=False,
+                  filter_menu=False)
+    net.barnes_hut(gravity=-9000, spring_length=140, spring_strength=0.004,
+                   damping=0.55)
+
+    def node_id(n):
+        return f"{n[0]}:{n[1]}"
+
+    for b in names:
+        node = (BEACON, b)
+        x, y = pos[node]
+        net.add_node(node_id(node), label=b, shape="triangle", size=22,
+                     color={"background": "#ffd54f", "border": "#0d1b2a"},
+                     title=f"Phare (casquette) — faisceaux vers ses idées",
+                     x=x * 40, y=y * 40, fixed=True)
+    for t, d in ideas.items():
+        node = (IDEA, t)
+        x, y = pos[node]
+        col = climate_color[d["doms"][0]]
+        net.add_node(
+            node_id(node),
+            label=wrap(t, 26).replace("\n", " "),
+            shape="diamond" if d["satellite"] else "dot",
+            size=4 + d["diameter"] / 55,
+            color={"background": col, "border": "#e8a13c" if d["satellite"] else MER},
+            title=f"{t}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
+                  f"<br>domaines : {', '.join(d['doms'])}",
+            x=x * 40, y=y * 40,
+        )
+    for u, v, dd in G.edges(data=True):
+        cu, cv = node_id(u), node_id(v)
+        if dd.get("croise"):
+            net.add_edge(cu, cv, color="#e8a13c", width=2.5,
+                         title="couvée")
+        elif u[0] == BEACON or v[0] == BEACON:
+            net.add_edge(cu, cv, color="#ffd54f", width=1.0, alpha=0.25,
+                         title="faisceau (lignée)")
+        else:
+            shared = len(set(ideas[u[1]]["doms"]) & set(ideas[v[1]]["doms"]))
+            net.add_edge(cu, cv, color="#2c3e50", width=0.6,
+                         title=f"courant ({shared} domaine(s) partagé(s))")
+    import json as _json
+    net.set_options(_json.dumps({
+        "physics": {"barnesHut": {"gravitationalConstant": -9000,
+                                  "springLength": 140,
+                                  "springStrength": 0.004,
+                                  "damping": 0.55}},
+        "interaction": {"hover": True},
+    }))
+    html_path = VAULT / "Archipel.html"
+    net.write_html(str(html_path), notebook=False)
+    print(f"interactif -> {html_path}")
+
 
 if __name__ == "__main__":
     main()

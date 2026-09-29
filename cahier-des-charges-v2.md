@@ -101,6 +101,31 @@ découvertes (pattern réutilisable, dette, problème sans solution). Les
 instances Pi des projets deviennent des sources d'idées — la boucle
 bibliothèque → idées → projets → idées se referme.
 
+## Doctrine de lecture et index de consultation (figée 2026-09-27)
+
+Le générateur d'idées a trois biais assumés : lecture vitrine (sommaire +
+intro + conclusion, pas le corps), plafond d'extraction (8000 car),
+atomisation subjective non confrontée.
+
+Doctrine :
+1. **L'approfondissement inclut la lecture profonde à la demande** — on ne
+   mine pas un document entier aujourd'hui ; on relit le chapitre pertinent
+   le jour où une idée satellite ou un projet l'exige.
+2. **Un index de consultation (RAG) peut porter cette lecture** — mais :
+   outil de L'AGENT, jamais fonctionnalité de l'app ; artefact dérivé et
+   jetable (script mince dans tools/, chunks en SQLite, embeddings via la
+   clé OpenRouter de l'utilisateur) ; construit le jour où une question
+   réelle l'exige, pas avant ; sa valeur se mesure sur les approfondissements
+   produits, sinon on le jette sans état d'âme.
+3. **À terme** (échelle : sensiblement plus de documents que la dizaine
+   d'expérimentation actuelle), l'index devient la façon standard de
+   consulter la bibliothèque — la doctrine ne change pas, seule l'échelle
+   justifie l'automatisation.
+4. Les PDF scannés exigent de l'OCR (Tesseract) avant tout indexation —
+   ils sont hors de l'index tant que non OCRisés.
+5. L'atomisation subjective n'est PAS résolue par un RAG : elle se traite
+   par la validation humaine par paquets (option à activer à la demande).
+
 ## Critères de robustesse (mesurables)
 
 - **Traçabilité** : toute idée mène à sa source (fiche → item → document)
