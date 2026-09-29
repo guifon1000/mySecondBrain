@@ -86,11 +86,22 @@ def load_codebase():
     depots = {}
     for r in conn.execute("SELECT title, code_scan_text FROM projects WHERE kind='projet'"):
         depots[r["title"]] = tokens(r["code_scan_text"] or "")
-    # phares : les casquettes, avec leur lignée d'items
+    # phares : les casquettes, avec leurs domaines (le pouvoir d'attraction)
     beacons = {}
     lineage = {}
     for r in conn.execute("SELECT id, title FROM projects WHERE kind='casquette'"):
-        beacons[r["title"]] = {"id": r["id"], "tokens": set()}
+        beacons[r["title"]] = {"id": r["id"], "tokens": set(), "doms": []}
+    for p in (VAULT / "Casquettes").glob("*.md"):
+        text = p.read_text(encoding="utf-8")
+        m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+        md = re.search(r"domaines:\s*\[(.*?)\]", m.group(1)) if m else None
+        doms = [d.strip() for d in md.group(1).split(",")] if md else []
+        # relier le fichier à la casquette via son frontmatter id
+        mid = re.search(r"^id:\s*(\d+)", m.group(1), re.MULTILINE) if m else None
+        if mid:
+            for r in conn.execute("SELECT title FROM projects WHERE id = ?", (mid.group(1),)):
+                if r["title"] in beacons:
+                    beacons[r["title"]]["doms"] = [d.strip() for d in doms]
     for r in conn.execute("SELECT vault_note, linked_project_id FROM items"):
         if not r["vault_note"] or not r["linked_project_id"]:
             continue
@@ -135,17 +146,29 @@ def main():
         d["beacon"] = next((c for c in lineage.get(d["source"] or -1, set())
                             if c in beacons), None)
 
+    # --- relève (phase 1) : chaque îlot-idée se rattache à un phare ----------
+    # score = domaines partagés avec la casquette ; bonus fort si lignée.
+    for t, d in ideas.items():
+        best_b, best_s = None, 0
+        for b, bd in beacons.items():
+            shared = len(set(d["doms"]) & set(bd["doms"]))
+            s = shared + (3.0 if d["beacon"] == b else 0.0)
+            if s > best_s:
+                best_b, best_s = b, s
+        d["relève"] = best_b if best_b and best_s >= 1 else None
+        d["relevé_score"] = best_s
+
     # --- graphe : idées + phares --------------------------------------------
     G = nx.Graph()
     for b in beacons:
         G.add_node((BEACON, b))
     for title, d in ideas.items():
         G.add_node((IDEA, title))
-        for b in d["beacon"] or []:
-            if b in beacons:
-                G.add_node((BEACON, b))
-                G.add_edge((IDEA, title), (BEACON, b), weight=2.5)
-    # courants : les idées partageant un domaine se rapprochent
+        # attraction du phare : relève (domaines) + lignée
+        if d["relève"]:
+            G.add_edge((IDEA, title), (BEACON, d["relève"]),
+                       weight=1.5 + d["relevé_score"])
+    # courants (layout uniquement) : les idées partageant un domaine se rapprochent
     for a, b in ((i, j) for i in ideas for j in ideas if i < j):
         shared = set(ideas[a]["doms"]) & set(ideas[b]["doms"])
         if shared:
@@ -155,27 +178,27 @@ def main():
             if b in ideas:
                 G.add_edge((IDEA, sec), (IDEA, b), weight=3.0, croise=True)
 
-    # --- layout : phares fixes en périphérie, îlots gravitent ---------------
+    # --- layout : phares fixes, îlots gravitent vers leur phare -------------
     pos = {}
     names = list(beacons)
-    R = 13.0
+    R = 9.0
     for i, b in enumerate(names):
         a = math.radians(-90 + (360 / max(len(names), 1)) * i)
-        pos[(BEACON, b)] = (R * math.cos(a), R * 0.82 * math.sin(a))
+        pos[(BEACON, b)] = (R * math.cos(a), R * 0.85 * math.sin(a))
     for n in G.nodes:
         if n not in pos:
             attached = [p for p in G.neighbors(n) if p[0] == BEACON]
             if attached:
                 x, y = pos[attached[0]]
-                pos[n] = (x + random.uniform(-3, 3), y + random.uniform(-3, 3))
+                pos[n] = (x + random.uniform(-2.5, 2.5), y + random.uniform(-2.5, 2.5))
             else:
-                pos[n] = (random.uniform(-5, 5), random.uniform(-5, 5))
+                pos[n] = (random.uniform(-4, 4), random.uniform(-4, 4))
     pos = nx.spring_layout(G, pos=pos, fixed=[(BEACON, b) for b in names],
-                           k=1.35, iterations=450, weight="weight", seed=42)
-    # respiration : l'archipel central s'étend vers les phares
+                           k=1.15, iterations=450, weight="weight", seed=42)
+    # la pleine mer s'éloigne : les îlots sans phare forment leur propre zone
     for n in pos:
-        if n[0] != BEACON:
-            pos[n] = (pos[n][0] * 1.9, pos[n][1] * 1.9)
+        if n[0] == IDEA and not ideas[n[1]]["relève"]:
+            pos[n] = (pos[n][0] * 1.6 - 6.0, pos[n][1] * 1.6)
 
     # --- palette des climats -------------------------------------------------
     climats = sorted({d["doms"][0] for d in ideas.values()})
@@ -186,23 +209,21 @@ def main():
     fig, ax = plt.subplots(figsize=(25, 16.5), facecolor=MER)
     ax.set_facecolor(MER)
 
-    # faisceaux des phares vers leurs îlots
+    # faisceaux : chaque phare éclaire ses îlots rattachés (relève)
     for b in names:
         node = (BEACON, b)
         targets = [n for n in G.neighbors(node) if n[0] == IDEA]
         for tnode in targets:
             x0, y0 = pos[node]
             x1, y1 = pos[tnode]
-            ax.plot([x0, x1], [y0, y1], color="#ffd54f", alpha=0.22, lw=1.1, zorder=1)
+            ax.plot([x0, x1], [y0, y1], color="#ffd54f", alpha=0.25, lw=1.2, zorder=1)
         # halo du phare
         ax.scatter(*pos[node], s=5200, color="#ffd54f", alpha=0.10, zorder=1,
                    linewidths=0)
 
+    # seule la couvée est tracée : les courants restent dans le layout,
+    # pas sur le rendu (ils étaient le fouillis)
     croise_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("croise")]
-    courant_edges = [(u, v) for u, v, d in G.edges(data=True)
-                     if not d.get("croise") and u[0] == IDEA and v[0] == IDEA]
-    nx.draw_networkx_edges(G, pos, edgelist=courant_edges, edge_color="#2c3e50",
-                           width=0.8, alpha=0.6, ax=ax)
     nx.draw_networkx_edges(G, pos, edgelist=croise_edges, edge_color="#e8a13c",
                            width=2.2, ax=ax)
 
@@ -211,8 +232,14 @@ def main():
                            node_color="#ffd54f", node_size=1900,
                            edgecolors="#0d1b2a", linewidths=1.5, ax=ax)
 
-    base_nodes = [(IDEA, t) for t in ideas if not ideas[t]["satellite"]]
+    base_nodes = [(IDEA, t) for t in ideas
+                  if not ideas[t]["satellite"] and ideas[t]["relève"]]
+    mer_nodes = [(IDEA, t) for t in ideas
+                 if not ideas[t]["satellite"] and not ideas[t]["relève"]]
     sat_nodes = [(IDEA, t) for t in ideas if ideas[t]["satellite"]]
+    nx.draw_networkx_nodes(G, pos, nodelist=mer_nodes, node_shape="o",
+                           node_color=PLEINE_MER, node_size=110,
+                           edgecolors=MER, linewidths=0.4, alpha=0.55, ax=ax)
     for nodes, marker, edge in ((base_nodes, "o", MER), (sat_nodes, "D", "#e8a13c")):
         nx.draw_networkx_nodes(
             G, pos, nodelist=nodes, node_shape=marker,
@@ -227,8 +254,11 @@ def main():
                     fontsize=11.5, color="#ffd54f", fontweight="bold",
                     bbox=dict(facecolor=MER, alpha=0.75, edgecolor="none", pad=2))
         else:
+            att = ideas[label]["relève"]
             ax.text(x, y - 0.045, wrap(label, 20), ha="center", va="top",
-                    fontsize=7, color=climate_color[ideas[label]["doms"][0]],
+                    fontsize=7 if att else 5.8,
+                    color=climate_color[ideas[label]["doms"][0]] if att
+                    else "#48586b",
                     bbox=dict(facecolor=MER, alpha=0.55, edgecolor="none", pad=0.7))
 
     ax.set_title(
@@ -332,10 +362,12 @@ def main():
                          title="couvée")
         elif u[0] == BEACON or v[0] == BEACON:
             net.add_edge(cu, cv, color="#ffd54f", width=1.0, alpha=0.25,
-                         title="faisceau (lignée)")
+                         title="faisceau (relève)")
         else:
             shared = len(set(ideas[u[1]]["doms"]) & set(ideas[v[1]]["doms"]))
-            net.add_edge(cu, cv, color="#2c3e50", width=0.6,
+            net.add_edge(cu, cv, color="#2c3e50", width=0.4, alpha=0.35,
+                         hidden=ideas[u[1]]["relève"] is not None
+                         and ideas[v[1]]["relève"] is not None,
                          title=f"courant ({shared} domaine(s) partagé(s))")
     import json as _json
     net.set_options(_json.dumps({
