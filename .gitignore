@@ -4,7 +4,15 @@ __pycache__/
 *.pyc
 .env
 server.log
-# Vault Obsidian — espace d'écriture personnel, hors git
-myVault/
-
+# Vault Obsidian — on versionne la PENSÉE structurée, pas les données
+myVault/*
+!myVault/Idees/
+!myVault/Casquettes/
+!myVault/Notes/
+myVault/Idees/archive/
+myVault/biblio/
+myVault/_sources/
+myVault/Inbox/
+myVault/Archives/
+myVault/Projets/*/
 # Documents à ingérer — données personnelles, hors git
