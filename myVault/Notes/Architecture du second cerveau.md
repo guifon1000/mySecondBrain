@@ -37,6 +37,21 @@ atomique ──couvée──> satellite ──approfondir──> mûre ──cod
   (état à tracer, phase 3 de la roadmap).
 - **archive** (`Idees/archive/`) : retirée, jamais supprimée.
 
+## Les modes de travail
+
+Trois modes, même infrastructure, switch mental :
+
+- **Productif** : tu exposes une idée/un besoin → l'agent localise (nouveau
+  projet ? existant ? idée à semer) et ouvre les portes documentaires.
+  Rigueur, vérification, livrables.
+- **Créatif** (« ouvre l'atelier ») : couvée **par contraste** — croisement
+  d'idées de domaines jamais cohabitants. Pas de hasard pur. Filtrage : le
+  sourire.
+- **Consultation** : fiches → FTS5 → PDF direct. Tokens minimaux.
+
+L'esthétique est une exigence : environnement de réflexion apaisant,
+organique — Obsidian pour la pensée, l'Archipel.html pour la vue.
+
 ## Les règles de robustesse
 
 1. **Une brique, une source de vérité** : le vault possède la pensée, la DB

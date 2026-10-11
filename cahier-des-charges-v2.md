@@ -126,6 +126,23 @@ Doctrine :
 5. L'atomisation subjective n'est PAS résolue par un RAG : elle se traite
    par la validation humaine par paquets (option à activer à la demande).
 
+## Modes de travail (figé 2026-09-30)
+
+L'usage du système s'organise en trois modes, avec un switch mental —
+l'infrastructure (vault, bibliothèque, idées) est identique dans tous
+les modes ; seuls le protocole de l'agent et le filtre de l'humain
+changent.
+
+| Mode | Déclencheur | Protocole | Filtrage |
+|---|---|---|---|
+| **Productif** | l'humain expose une idée, fonctionnalité ou besoin d'outil | l'agent localise : nouveau projet ? projet existant ? simple idée à semer ; il pointe les entrées documentaires pertinentes (fiches, FTS5) ; il oriente vers l'instance Pi du projet concerné | rigueur : vérification contre l'index, critères mesurables |
+| **Créatif** (« ouvre l'atelier ») | à l'envie, quand le stock a grossi | couvée **par contraste** : l'agent croise des idées de domaines jamais cohabitants — jamais de hasard pur, le contraste est fertile statistiquement | le sourire : pas de justification obligatoire, l'humain garde/jette selon l'envie |
+| **Consultation** | « consulte : [question] » | hiérarchie à trois étages : fiches (_sources/) → FTS5 (page exacte) → lecture directe du PDF (dernier recours) | précision, tokens minimaux |
+
+L'agent en mode productif est le **réceptionniste du chantier** : l'humain
+arrive avec du brut, l'agent dit où ça atterrit et quelles portes de la
+bibliothèque s'ouvrent.
+
 ## Critères de robustesse (mesurables)
 
 - **Traçabilité** : toute idée mène à sa source (fiche → item → document)
