@@ -26,6 +26,7 @@ préservé lors des déplacements. Les renommer casse juste le déplacement auto
 | Test corpus | `C:\Users\guill\test_corpus` | dédiée « Prospectiviste » | RAG prospectif construction résiliente (actif) |
 | Tiles3d | `C:\Users\guill\Rust\tiles3d` | (instance à confirmer) | jeu 3D Bevy/Rust — terrain infini, hobby sentimental |
 | Spectral | `C:\Users\guill\Rust\spectral` | (instance à confirmer) | moteur pseudospectral 2D → météo de Tiles3d ; pont doctorat CFD |
+| Hex | (à créer — projet neuf) | dédiée à ouvrir | blocking automatique structuré OpenFOAM : CAO → MAT → blocs → blockMesh ; héritier pwnGrid/eikonalFoam/QMAT |
 
 ## Projets abandonnés (vestiges)
 

@@ -22,12 +22,12 @@ Climats : CFD, assemblages, bois, données, durabilité, géométrie, mécanique
 - score 0.60 — [[Le format d'échange suit le modèle]] (climat : données)
 - score 0.42 — [[L'ossature à joints générés (kigumi plate-forme)]] (climat : assemblages)
 - score 0.34 — [[Un joint est une recette de plans de coupe]] (climat : assemblages)
+- score 0.33 — [[Vendre le maillage, pas le mailleur]] (climat : CFD)
+- score 0.31 — [[Le même offset sert la couche-limite et la trajectoire CNC]] (climat : géométrie)
 - score 0.28 — [[Le module comme contrat, la géométrie comme dérivation]] (climat : paramétrique)
 - score 0.26 — [[Un tableau normatif est un jeu de tests]] (climat : données)
 - score 0.25 — [[L'entraxe existe déjà, le module non]] (climat : paramétrique)
 - score 0.23 — [[Kits structuraux, la valeur dans la supply chain]] (climat : normes)
-- score 0.23 — [[L'offset en trois temps]] (climat : géométrie)
-- score 0.22 — [[Le connecteur disparaît du devis]] (climat : métier)
 
 ## Faisceaux par phare
 
