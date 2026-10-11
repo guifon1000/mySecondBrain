@@ -1,19 +1,27 @@
-"""Archipel des idées — v0.4 : phares, îlots et climats.
+"""Archipel des idées — v0.5 : une casquette active, qui éclaire.
 
-- **Casquettes = phares** : ancrés en périphérie, points d'attraction des
-  idées (faisceaux = lignée documentaire). Nommés.
-- **Îlots-idées** : positionnés par les courants de domaines partagés +
-  l'attraction de leur phare ; colorés par leur grande catégorie (climat) ;
-  leur **diamètre** = la boîte à outils disponible dans les dépôts (adéquation
-  lexicale avec les scans) — les projets eux-mêmes sont invisibles, ils
-  pèsent sans paraître.
-- **Satellites** : les croisements de couvée validés (diamants, contour or).
+- **Casquette active** : une seule à la fois (`active: true` dans le
+  frontmatter de `myVault/Casquettes/*.md`). Ses idées sont éclairées :
+  partage au moins un domaine avec elle, ou vient de sa lignée documentaire.
+  Les autres idées restent visibles, atténuées.
+- **Liens éclairés** : les courants (domaines partagés) entre idées
+  éclairées, et les couvées qui touchent une idée éclairée.
+  Les autres liens sont à peine tracés.
+- **Îlots-idées** : positionnés par leurs courants de domaines partagés ;
+  colorés par climat (premier domaine) ; diamètre = outillage disponible
+  dans les dépôts.
+- **Satellites** : couvées validées (diamants, contour or).
+- Sans casquette active : carte neutre, toutes les idées au même régime.
 
-Usage : .venv/Scripts/python tools/galaxie.py
+Usage :
+    .venv/Scripts/python tools/galaxie.py                    # carte avec la casquette active
+    .venv/Scripts/python tools/galaxie.py --casquette "Menuisier"   # change l'active
+    .venv/Scripts/python tools/galaxie.py --aucune          # carte neutre
 """
-import math
-import random
+import argparse
+import json
 import re
+import sqlite3
 import sys
 import textwrap
 from pathlib import Path
@@ -30,10 +38,10 @@ from matplotlib.lines import Line2D
 ROOT = Path(__file__).resolve().parent.parent
 VAULT = ROOT / "myVault"
 IDEES = VAULT / "Idees"
+CASQ = VAULT / "Casquettes"
 OUT_PNG = VAULT / "biblio" / "img" / "galaxie-idees.png"
 OUT_NOTE = IDEES / "Galaxie.md"
-
-IDEA, BEACON = "idee", "phare"
+OUT_HTML = VAULT / "Archipel.html"
 
 STOPWORDS = set("""
 le la les un une des de du au aux et ou en dans sur pour par avec sans sous
@@ -45,7 +53,12 @@ cas type types partie point exemple etc cf see the of and in to for with
 """.split())
 
 MER = "#0d1b2a"
-PLEINE_MER = "#5f6b7a"
+DIM = "#2b3a4b"
+DIM_TXT = "#4a5a6b"
+LIT_LINK = "#e8a13c"
+NEUTRE = "#8fa3b8"
+LIEN_LIT = "#8fa3b8"
+SCORE_SEUIL = 2  # au moins deux domaines partagés, ou lignée
 
 
 def tokens(text: str) -> set[str]:
@@ -53,55 +66,79 @@ def tokens(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS and not w.isdigit()}
 
 
-def parse_note(path: Path):
-    text = path.read_text(encoding="utf-8")
-    doms, croise, source = [], [], None
+def frontmatter(text: str) -> str:
     m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
-    if m:
-        block = m.group(1)
-        md = re.search(r"domaines:\s*\[(.*?)\]", block)
-        if md:
-            doms = [d.strip() for d in md.group(1).split(",") if d.strip()]
-        for line in block.splitlines():
-            if line.strip().startswith("croise:"):
-                croise = re.findall(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]", line)
-            if line.strip().startswith("source:"):
-                ms = re.search(r"SB-(\d+)", line)
-                if ms:
-                    source = int(ms.group(1))
+    return m.group(1) if m else ""
+
+
+def domaines_de(block: str) -> list[str]:
+    md = re.search(r"domaines:\s*\[(.*?)\]", block)
+    return [d.strip() for d in md.group(1).split(",") if d.strip()] if md else []
+
+
+def parse_idea(path: Path):
+    text = path.read_text(encoding="utf-8")
+    block = frontmatter(text)
+    doms = domaines_de(block)
+    croise, source = [], None
+    for line in block.splitlines():
+        if line.strip().startswith("croise:"):
+            croise = re.findall(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]", line)
+        if line.strip().startswith("source:"):
+            ms = re.search(r"SB-(\d+)", line)
+            if ms:
+                source = int(ms.group(1))
     body = re.sub(r"^---\n.*?\n---", "", text, count=1, flags=re.DOTALL)
     return doms, croise, source, f"{path.stem} {body}"
 
 
-def wrap(label, width=20):
-    return "\n".join(textwrap.wrap(label, width=width))
-
-
-def load_codebase():
-    import sqlite3
-
+def load_casquettes():
+    """{titre_db: {'doms': [...], 'active': bool, 'path': Path, 'id': int}}"""
     conn = sqlite3.connect(ROOT / "data" / "secondbrain.db")
     conn.row_factory = sqlite3.Row
-    # dépôts : la boîte à outils (invisibles sur la carte, présents dans le diamètre)
-    depots = {}
-    for r in conn.execute("SELECT title, code_scan_text FROM projects WHERE kind='projet'"):
-        depots[r["title"]] = tokens(r["code_scan_text"] or "")
-    # phares : les casquettes, avec leurs domaines (le pouvoir d'attraction)
-    beacons = {}
-    lineage = {}
-    for r in conn.execute("SELECT id, title FROM projects WHERE kind='casquette'"):
-        beacons[r["title"]] = {"id": r["id"], "tokens": set(), "doms": []}
-    for p in (VAULT / "Casquettes").glob("*.md"):
-        text = p.read_text(encoding="utf-8")
-        m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
-        md = re.search(r"domaines:\s*\[(.*?)\]", m.group(1)) if m else None
-        doms = [d.strip() for d in md.group(1).split(",")] if md else []
-        # relier le fichier à la casquette via son frontmatter id
-        mid = re.search(r"^id:\s*(\d+)", m.group(1), re.MULTILINE) if m else None
-        if mid:
-            for r in conn.execute("SELECT title FROM projects WHERE id = ?", (mid.group(1),)):
-                if r["title"] in beacons:
-                    beacons[r["title"]]["doms"] = [d.strip() for d in doms]
+    titres = {r["id"]: r["title"] for r in
+              conn.execute("SELECT id, title FROM projects WHERE kind='casquette'")}
+    conn.close()
+    casq = {}
+    for p in sorted(CASQ.glob("*.md")):
+        block = frontmatter(p.read_text(encoding="utf-8"))
+        mid = re.search(r"^id:\s*(\d+)", block, re.MULTILINE)
+        if not mid or int(mid.group(1)) not in titres:
+            continue
+        titre = titres[int(mid.group(1))]
+        casq[titre] = {
+            "id": int(mid.group(1)),
+            "doms": domaines_de(block),
+            "active": re.search(r"^active:\s*true\s*$", block, re.MULTILINE) is not None,
+            "path": p,
+        }
+    return casq
+
+
+def set_active(casq: dict, nom: str | None):
+    """Une seule casquette porte `active: true` ; nom=None désactive tout."""
+    if nom is not None and nom not in casq:
+        sys.exit(f"casquette inconnue : {nom!r} — choix : {', '.join(casq)}")
+    for titre, c in casq.items():
+        text = c["path"].read_text(encoding="utf-8")
+        m = re.match(r"^(---\n)(.*?)(\n---)", text, re.DOTALL)
+        if not m:
+            continue
+        lines = [l for l in m.group(2).splitlines() if not l.startswith("active:")]
+        if titre == nom:
+            lines.append("active: true")
+        new = m.group(1) + "\n".join(lines) + m.group(3) + text[m.end():]
+        if new != text:
+            c["path"].write_text(new, encoding="utf-8")
+        c["active"] = titre == nom
+
+
+def load_depots():
+    conn = sqlite3.connect(ROOT / "data" / "secondbrain.db")
+    conn.row_factory = sqlite3.Row
+    depots = {r["title"]: tokens(r["code_scan_text"] or "")
+              for r in conn.execute("SELECT title, code_scan_text FROM projects WHERE kind='projet'")}
+    lignee = {}
     for r in conn.execute("SELECT vault_note, linked_project_id FROM items"):
         if not r["vault_note"] or not r["linked_project_id"]:
             continue
@@ -109,20 +146,24 @@ def load_codebase():
         pt = conn.execute("SELECT title, kind FROM projects WHERE id = ?",
                           (r["linked_project_id"],)).fetchone()
         if m and pt and pt["kind"] == "casquette":
-            lineage.setdefault(int(m.group(1)), set()).add(pt["title"])
+            lignee.setdefault(int(m.group(1)), set()).add(pt["title"])
     conn.close()
-    return depots, beacons, lineage
+    return depots, lignee
 
 
-def main():
-    random.seed(42)
-    depots, beacons, lineage = load_codebase()
+def wrap(label, width=20):
+    return "\n".join(textwrap.wrap(label, width=width))
+
+
+def build(active: str | None):
+    casq = load_casquettes()
+    depots, lignee = load_depots()
+    doms_active = set(casq[active]["doms"]) if active else set()
 
     ideas, crosses = {}, []
-    sub_by_kind = {"atomiques": IDEA, "satellites": IDEA}
     for kind_dir in ("atomiques", "satellites"):
         for p in sorted((IDEES / kind_dir).glob("*.md")):
-            doms, croise, source, body = parse_note(p)
+            doms, croise, source, body = parse_idea(p)
             if not doms:
                 continue
             ideas[p.stem] = {"doms": doms, "croise": croise, "source": source,
@@ -130,7 +171,7 @@ def main():
             if croise:
                 crosses.append((p.stem, croise))
 
-    # --- diamètre (outils des dépôts) + phare d'attache (lignée) ------------
+    # diamètre = outillage disponible ; lignée = casquette documentaire
     for t, d in ideas.items():
         best, n_match = 0.0, 0
         for tk in depots.values():
@@ -141,245 +182,231 @@ def main():
                 best = max(best, score)
                 if score >= 0.15:
                     n_match += 1
-        d["diameter"] = 140 + 520 * best + 90 * n_match
         d["tool_score"] = best
-        d["beacon"] = next((c for c in lineage.get(d["source"] or -1, set())
-                            if c in beacons), None)
+        d["diameter"] = 140 + 520 * best + 90 * n_match
+        d["lignee"] = lignee.get(d["source"] or -1, set())
 
-    # --- relève (phase 1) : chaque îlot-idée se rattache à un phare ----------
-    # score = domaines partagés avec la casquette ; bonus fort si lignée.
+    # éclairage : score = domaines partagés avec la casquette active (+3 si lignée)
     for t, d in ideas.items():
-        best_b, best_s = None, 0
-        for b, bd in beacons.items():
-            shared = len(set(d["doms"]) & set(bd["doms"]))
-            s = shared + (3.0 if d["beacon"] == b else 0.0)
-            if s > best_s:
-                best_b, best_s = b, s
-        d["relève"] = best_b if best_b and best_s >= 1 else None
-        d["relevé_score"] = best_s
+        if active is None:
+            d["score"], d["eclairee"] = None, True
+            continue
+        shared = len(set(d["doms"]) & doms_active)
+        bonus = 3 if active in d["lignee"] else 0
+        d["score"] = shared + bonus
+        d["eclairee"] = d["score"] >= SCORE_SEUIL
 
-    # --- graphe : idées + phares --------------------------------------------
+    # graphe : courants (domaines partagés) + couvées ; sert au layout
     G = nx.Graph()
-    for b in beacons:
-        G.add_node((BEACON, b))
-    for title, d in ideas.items():
-        G.add_node((IDEA, title))
-        # attraction du phare : relève (domaines) + lignée
-        if d["relève"]:
-            G.add_edge((IDEA, title), (BEACON, d["relève"]),
-                       weight=1.5 + d["relevé_score"])
-    # courants (layout uniquement) : les idées partageant un domaine se rapprochent
-    for a, b in ((i, j) for i in ideas for j in ideas if i < j):
-        shared = set(ideas[a]["doms"]) & set(ideas[b]["doms"])
-        if shared:
-            G.add_edge((IDEA, a), (IDEA, b), weight=1.2 * len(shared))
+    G.add_nodes_from(ideas)
+    for a in ideas:
+        for b in ideas:
+            if a < b:
+                shared = set(ideas[a]["doms"]) & set(ideas[b]["doms"])
+                if shared:
+                    G.add_edge(a, b, kind="courant", weight=1.0 * len(shared))
     for sec, bases in crosses:
         for b in bases:
             if b in ideas:
-                G.add_edge((IDEA, sec), (IDEA, b), weight=3.0, croise=True)
+                G.add_edge(sec, b, kind="couvee", weight=3.0)
 
-    # --- layout : phares fixes, îlots gravitent vers leur phare -------------
-    pos = {}
-    names = list(beacons)
-    R = 9.0
-    for i, b in enumerate(names):
-        a = math.radians(-90 + (360 / max(len(names), 1)) * i)
-        pos[(BEACON, b)] = (R * math.cos(a), R * 0.85 * math.sin(a))
-    for n in G.nodes:
-        if n not in pos:
-            attached = [p for p in G.neighbors(n) if p[0] == BEACON]
-            if attached:
-                x, y = pos[attached[0]]
-                pos[n] = (x + random.uniform(-2.5, 2.5), y + random.uniform(-2.5, 2.5))
-            else:
-                pos[n] = (random.uniform(-4, 4), random.uniform(-4, 4))
-    pos = nx.spring_layout(G, pos=pos, fixed=[(BEACON, b) for b in names],
-                           k=1.15, iterations=450, weight="weight", seed=42)
-    # la pleine mer s'éloigne : les îlots sans phare forment leur propre zone
-    for n in pos:
-        if n[0] == IDEA and not ideas[n[1]]["relève"]:
-            pos[n] = (pos[n][0] * 1.6 - 6.0, pos[n][1] * 1.6)
+    pos = nx.spring_layout(G, k=1.1, iterations=400, weight="weight", seed=42)
+    return casq, ideas, crosses, G, pos
 
-    # --- palette des climats -------------------------------------------------
+
+def climats_couleurs(ideas):
     climats = sorted({d["doms"][0] for d in ideas.values()})
     cmap = plt.get_cmap("tab20")
-    climate_color = {c: cmap(i % 20 / 20) for i, c in enumerate(climats)}
+    return climats, {c: cmap(i % 20 / 20) for i, c in enumerate(climats)}
 
-    # --- rendu ---------------------------------------------------------------
+
+def dessiner_png(casq, ideas, crosses, G, pos, active):
+    climats, climate_color = climats_couleurs(ideas)
+    neutre = active is None
+    n_lit = sum(1 for d in ideas.values() if d["eclairee"])
+
     fig, ax = plt.subplots(figsize=(25, 16.5), facecolor=MER)
     ax.set_facecolor(MER)
 
-    # faisceaux : chaque phare éclaire ses îlots rattachés (relève)
-    for b in names:
-        node = (BEACON, b)
-        targets = [n for n in G.neighbors(node) if n[0] == IDEA]
-        for tnode in targets:
-            x0, y0 = pos[node]
-            x1, y1 = pos[tnode]
-            ax.plot([x0, x1], [y0, y1], color="#ffd54f", alpha=0.25, lw=1.2, zorder=1)
-        # halo du phare
-        ax.scatter(*pos[node], s=5200, color="#ffd54f", alpha=0.10, zorder=1,
-                   linewidths=0)
+    def lit(n):
+        return neutre or ideas[n]["eclairee"]
 
-    # seule la couvée est tracée : les courants restent dans le layout,
-    # pas sur le rendu (ils étaient le fouillis)
-    croise_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("croise")]
-    nx.draw_networkx_edges(G, pos, edgelist=croise_edges, edge_color="#e8a13c",
-                           width=2.2, ax=ax)
+    # liens : couvées (toujours, atténuées hors éclairage) + courants éclairés
+    for u, v, dd in G.edges(data=True):
+        if dd["kind"] == "couvee":
+            on = lit(u) or lit(v)
+            ax.plot([pos[u][0], pos[v][0]], [pos[u][1], pos[v][1]],
+                    color=LIT_LINK if on else DIM, alpha=1.0 if on else 0.35,
+                    lw=2.2 if on else 0.8, zorder=2)
+        elif not neutre and lit(u) and lit(v):
+            ax.plot([pos[u][0], pos[v][0]], [pos[u][1], pos[v][1]],
+                    color=LIEN_LIT, alpha=0.30, lw=0.9, zorder=1)
 
-    beacon_nodes = [(BEACON, b) for b in names]
-    nx.draw_networkx_nodes(G, pos, nodelist=beacon_nodes, node_shape="^",
-                           node_color="#ffd54f", node_size=1900,
-                           edgecolors="#0d1b2a", linewidths=1.5, ax=ax)
+    names_lit = [n for n in ideas if lit(n) and not ideas[n]["satellite"]]
+    names_mer = [n for n in ideas if not lit(n) and not ideas[n]["satellite"]]
+    sat = [n for n in ideas if ideas[n]["satellite"]]
 
-    base_nodes = [(IDEA, t) for t in ideas
-                  if not ideas[t]["satellite"] and ideas[t]["relève"]]
-    mer_nodes = [(IDEA, t) for t in ideas
-                 if not ideas[t]["satellite"] and not ideas[t]["relève"]]
-    sat_nodes = [(IDEA, t) for t in ideas if ideas[t]["satellite"]]
-    nx.draw_networkx_nodes(G, pos, nodelist=mer_nodes, node_shape="o",
-                           node_color=PLEINE_MER, node_size=110,
-                           edgecolors=MER, linewidths=0.4, alpha=0.55, ax=ax)
-    for nodes, marker, edge in ((base_nodes, "o", MER), (sat_nodes, "D", "#e8a13c")):
+    def draw(nodes, marker, edge, alpha, size_factor=1.0, color_of=None):
+        if not nodes:
+            return
         nx.draw_networkx_nodes(
             G, pos, nodelist=nodes, node_shape=marker,
-            node_color=[climate_color[ideas[n[1]]["doms"][0]] for n in nodes],
-            node_size=[ideas[n[1]]["diameter"] for n in nodes],
-            edgecolors=edge, linewidths=1.2 if marker == "D" else 0.6, ax=ax)
+            node_color=[color_of(n) for n in nodes],
+            node_size=[ideas[n]["diameter"] * size_factor for n in nodes],
+            edgecolors=edge, linewidths=1.2 if marker == "D" else 0.6,
+            alpha=alpha, ax=ax)
 
-    for node, (x, y) in pos.items():
-        kind, label = node
-        if kind == BEACON:
-            ax.text(x, y - 0.09, wrap(label, 16), ha="center", va="top",
-                    fontsize=11.5, color="#ffd54f", fontweight="bold",
-                    bbox=dict(facecolor=MER, alpha=0.75, edgecolor="none", pad=2))
+    draw(names_mer, "o", MER, 0.45, 0.55, lambda n: DIM)
+    draw(names_lit, "o", MER, 1.0, 1.0, lambda n: climate_color[ideas[n]["doms"][0]])
+    draw(sat, "D", LIT_LINK if not neutre else LIT_LINK, 1.0, 1.0,
+         lambda n: climate_color[ideas[n]["doms"][0]] if lit(n) else DIM)
+
+    for n, (x, y) in pos.items():
+        d = ideas[n]
+        if lit(n):
+            ax.text(x, y - 0.045, wrap(n, 20), ha="center", va="top", fontsize=7,
+                    color=climate_color[d["doms"][0]],
+                    bbox=dict(facecolor=MER, alpha=0.6, edgecolor="none", pad=0.7))
         else:
-            att = ideas[label]["relève"]
-            ax.text(x, y - 0.045, wrap(label, 20), ha="center", va="top",
-                    fontsize=7 if att else 5.8,
-                    color=climate_color[ideas[label]["doms"][0]] if att
-                    else "#48586b",
-                    bbox=dict(facecolor=MER, alpha=0.55, edgecolor="none", pad=0.7))
+            ax.text(x, y - 0.035, wrap(n, 20), ha="center", va="top", fontsize=5.2,
+                    color=DIM_TXT,
+                    bbox=dict(facecolor=MER, alpha=0.3, edgecolor="none", pad=0))
 
+    titre_actif = f"casquette active : {active}" if active else "carte neutre"
     ax.set_title(
-        f"Archipel des idées — {len(ideas)} îlots · {len(climats)} climats · "
-        f"{len(crosses)} satellite(s) · {len(names)} phares",
+        f"Archipel des idées — {titre_actif} · {n_lit} idées éclairées / {len(ideas)} · "
+        f"{len(climats)} climats · {len(crosses)} couvée(s)",
         color="#dce8f5", fontsize=16, pad=18,
     )
-
-    handles = [Line2D([], [], marker="^", linestyle="", markersize=12,
-                      markerfacecolor="#ffd54f", color=MER, label=f"phare {b}")
-               for b in names]
-    handles += [
-        Line2D([], [], marker="o", linestyle="", markersize=7,
-               markerfacecolor="#8fa3b8", color=MER,
-               label="îlot-idée (diamètre = outils dispo, couleur = climat)"),
+    handles = [
+        Line2D([], [], marker="o", linestyle="", markersize=8,
+               markerfacecolor=NEUTRE, color=MER, label="idée éclairée (couleur = climat)"),
+        Line2D([], [], marker="o", linestyle="", markersize=6,
+               markerfacecolor=DIM, color=MER, label="idée hors éclairage"),
         Line2D([], [], marker="D", linestyle="", markersize=7,
-               markerfacecolor="#8fa3b8", markeredgecolor="#e8a13c", color=MER,
-               label="satellite (couvée validée)"),
-        Line2D([], [], color="#ffd54f", lw=1.2, alpha=0.5, label="faisceau du phare"),
-        Line2D([], [], color="#e8a13c", lw=2, label="couvée"),
+               markerfacecolor=NEUTRE, markeredgecolor=LIT_LINK, color=MER, label="satellite (couvée validée)"),
+        Line2D([], [], color=LIEN_LIT, lw=1.2, alpha=0.6, label="courant entre idées éclairées"),
+        Line2D([], [], color=LIT_LINK, lw=2, label="couvée"),
     ]
-    ax.legend(handles=handles, loc="lower left", fontsize=7.2, ncol=4,
-              facecolor="#0d1b2a", edgecolor="#22303f", labelcolor="#dce8f5")
+    ax.legend(handles=handles, loc="lower left", fontsize=7.2, ncol=3,
+              facecolor=MER, edgecolor="#22303f", labelcolor="#dce8f5")
     ax.axis("off")
     fig.tight_layout()
     OUT_PNG.parent.mkdir(exist_ok=True)
     fig.savefig(OUT_PNG, dpi=110, facecolor=fig.get_facecolor())
     print(f"rendu -> {OUT_PNG}")
 
-    # --- note ---------------------------------------------------------------
-    lines = ["", "## Diamètres remarquables (boîte à outils des dépôts)", ""]
-    ranked = sorted(ideas.items(), key=lambda kv: -kv[1]["tool_score"])
-    for t, d in ranked[:10]:
-        lines.append(f"- score {d['tool_score']:.2f} — [[{t}]] "
-                     f"(climat : {d['doms'][0]})")
-    lines += ["", "## Faisceaux par phare", ""]
-    for b in names:
-        attached = [t for t, d in ideas.items() if d["beacon"] == b]
-        if attached:
-            lines.append(f"**{b}** : " + ", ".join(f"[[{t}]]" for t in attached))
-        else:
-            lines.append(f"**{b}** : aucun îlot rattaché — terre à coloniser")
-    lines.append("")
 
+def ecrire_note(casq, ideas, crosses, active):
+    climats, _ = climats_couleurs(ideas)
+    lit = [t for t, d in ideas.items() if d["eclairee"]] if active else []
+    lines = []
+    if active:
+        lines += [f"**Casquette active** : {active}", "",
+                  "## Idées éclairées", ""]
+        for t in sorted(lit, key=lambda t: -(ideas[t]["score"] or 0)):
+            lines.append(f"- [[{t}]] (score {ideas[t]['score']})")
+    else:
+        lines.append("Aucune casquette active : carte neutre.")
+    lines += ["", "## Diamètres remarquables (boîte à outils des dépôts)", ""]
+    for t, d in sorted(ideas.items(), key=lambda kv: -kv[1]["tool_score"])[:10]:
+        lines.append(f"- score {d['tool_score']:.2f} — [[{t}]] (climat : {d['doms'][0]})")
     note = (
         "---\n"
         "généré: par tools/galaxie.py\n"
         "---\n\n"
         "# Archipel des idées\n\n"
         f"![[{OUT_PNG.name}]]\n\n"
-        "Légende : les **phares** (triangles jaunes) sont les casquettes — les\n"
-        "points d'attraction nommés. Les **îlots-idées** : leur couleur = leur\n"
-        "**climat** (grande catégorie), leur **diamètre** = la boîte à outils\n"
-        "disponible dans les dépôts pour les incarner (les dépôts eux-mêmes\n"
-        "sont invisibles — ils pèsent sans paraître). Les **faisceaux** jaunes\n"
-        "relient chaque îlot au phare de sa lignée documentaire. Les\n"
-        "**satellites** (diamants, contour or) sont les croisements de couvée.\n\n"
-        "Climats : " + ", ".join(climats) + "\n"
-        + "\n".join(lines)
+        "Une seule **casquette active** éclaire la carte : ses idées sont\n"
+        "lisibles, leurs liens (courants et couvées) sont tracés. Les autres\n"
+        "idées restent visibles, atténuées. Changer d'éclairage :\n"
+        "`python tools/galaxie.py --casquette \"Nom\"`.\n\n"
+        "Climats : " + ", ".join(climats) + "\n\n"
+        + "\n".join(lines) + "\n"
     )
     OUT_NOTE.write_text(note, encoding="utf-8")
     print(f"note -> {OUT_NOTE}")
 
-    # --- version interactive (pyvis) : navigable, secouable -----------------
+
+def dessiner_html(casq, ideas, crosses, G, pos, active):
     from pyvis.network import Network
 
-    net = Network(height="850px", width="100%", bgcolor="#0d1b2a",
+    _, climate_color = climats_couleurs(ideas)
+    neutre = active is None
+    net = Network(height="850px", width="100%", bgcolor=MER,
                   font_color="#dce8f5", select_menu=False,
                   filter_menu=False, cdn_resources="remote")
-    net.barnes_hut(gravity=-9000, spring_length=140, spring_strength=0.004,
-                   damping=0.55)
 
-    def node_id(n):
-        return f"{n[0]}:{n[1]}"
+    def lit(n):
+        return neutre or ideas[n]["eclairee"]
 
-    for b in names:
-        node = (BEACON, b)
-        x, y = pos[node]
-        net.add_node(node_id(node), label=b, shape="triangle", size=22,
-                     color={"background": "#ffd54f", "border": "#0d1b2a"},
-                     title=f"Phare (casquette) — faisceaux vers ses idées",
-                     x=x * 40, y=y * 40, fixed=True)
-    for t, d in ideas.items():
-        node = (IDEA, t)
-        x, y = pos[node]
+    for n, d in ideas.items():
+        x, y = pos[n]
+        on = lit(n)
         col = climate_color[d["doms"][0]]
+        col_hex = "#%02x%02x%02x" % tuple(int(c * 255) for c in col[:3])
+        if d["satellite"]:
+            fond = col_hex if on else DIM
+            bord = LIT_LINK
+            forme = "diamond"
+        else:
+            fond = col_hex if on else DIM
+            bord = MER
+            forme = "dot"
         net.add_node(
-            node_id(node),
-            label=wrap(t, 26).replace("\n", " "),
-            shape="diamond" if d["satellite"] else "dot",
-            size=4 + d["diameter"] / 55,
-            color={"background": col, "border": "#e8a13c" if d["satellite"] else MER},
-            title=f"{t}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
-                  f"<br>domaines : {', '.join(d['doms'])}",
+            f"idee:{n}",
+            label=wrap(n, 26).replace("\n", " "),
+            shape=forme,
+            size=4 + d["diameter"] / 55 if on else 3 + d["diameter"] / 110,
+            color={"background": fond, "border": bord},
+            font={"color": "#dce8f5" if on else DIM_TXT, "size": 14 if on else 9},
+            title=f"{n}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
+                  f"<br>domaines : {', '.join(d['doms'])}"
+                  + (f"<br>score casquette : {d['score']}" if d["score"] is not None else ""),
             x=x * 40, y=y * 40,
         )
     for u, v, dd in G.edges(data=True):
-        cu, cv = node_id(u), node_id(v)
-        if dd.get("croise"):
-            net.add_edge(cu, cv, color="#e8a13c", width=2.5,
-                         title="couvée")
-        elif u[0] == BEACON or v[0] == BEACON:
-            net.add_edge(cu, cv, color="#ffd54f", width=1.0, alpha=0.25,
-                         title="faisceau (relève)")
-        else:
-            shared = len(set(ideas[u[1]]["doms"]) & set(ideas[v[1]]["doms"]))
-            net.add_edge(cu, cv, color="#2c3e50", width=0.4, alpha=0.35,
-                         hidden=ideas[u[1]]["relève"] is not None
-                         and ideas[v[1]]["relève"] is not None,
+        cu, cv = f"idee:{u}", f"idee:{v}"
+        if dd["kind"] == "couvee":
+            on = lit(u) or lit(v)
+            net.add_edge(cu, cv, color=LIT_LINK if on else DIM,
+                         width=2.5 if on else 0.8, title="couvée")
+        elif not neutre and lit(u) and lit(v):
+            shared = len(set(ideas[u]["doms"]) & set(ideas[v]["doms"]))
+            net.add_edge(cu, cv, color=LIEN_LIT, width=0.9,
                          title=f"courant ({shared} domaine(s) partagé(s))")
-    import json as _json
-    net.set_options(_json.dumps({
+    net.set_options(json.dumps({
         "physics": {"barnesHut": {"gravitationalConstant": -9000,
                                   "springLength": 140,
                                   "springStrength": 0.004,
                                   "damping": 0.55}},
         "interaction": {"hover": True},
     }))
-    html_path = VAULT / "Archipel.html"
-    net.write_html(str(html_path), notebook=False)
-    print(f"interactif -> {html_path}")
+    net.write_html(str(OUT_HTML), notebook=False)
+    print(f"interactif -> {OUT_HTML}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Archipel des idées — une casquette active")
+    ap.add_argument("--casquette", help="définit la casquette active (une seule)")
+    ap.add_argument("--aucune", action="store_true", help="aucune casquette active : carte neutre")
+    a = ap.parse_args()
+
+    casq = load_casquettes()
+    if a.aucune:
+        set_active(casq, None)
+    elif a.casquette:
+        set_active(casq, a.casquette)
+    # ré-lecture après éventuelle écriture
+    casq = load_casquettes()
+    active = next((t for t, c in casq.items() if c["active"]), None)
+
+    casq, ideas, crosses, G, pos = build(active)
+    n_lit = sum(1 for d in ideas.values() if d["eclairee"])
+    print(f"casquette active : {active or 'aucune'} — {n_lit} idée(s) éclairée(s) / {len(ideas)}")
+    dessiner_png(casq, ideas, crosses, G, pos, active)
+    ecrire_note(casq, ideas, crosses, active)
+    dessiner_html(casq, ideas, crosses, G, pos, active)
 
 
 if __name__ == "__main__":

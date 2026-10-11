@@ -6,15 +6,23 @@ généré: par tools/galaxie.py
 
 ![[galaxie-idees.png]]
 
-Légende : les **phares** (triangles jaunes) sont les casquettes — les
-points d'attraction nommés. Les **îlots-idées** : leur couleur = leur
-**climat** (grande catégorie), leur **diamètre** = la boîte à outils
-disponible dans les dépôts pour les incarner (les dépôts eux-mêmes
-sont invisibles — ils pèsent sans paraître). Les **faisceaux** jaunes
-relient chaque îlot au phare de sa lignée documentaire. Les
-**satellites** (diamants, contour or) sont les croisements de couvée.
+Une seule **casquette active** éclaire la carte : ses idées sont
+lisibles, leurs liens (courants et couvées) sont tracés. Les autres
+idées restent visibles, atténuées. Changer d'éclairage :
+`python tools/galaxie.py --casquette "Nom"`.
 
 Climats : CFD, assemblages, bois, données, durabilité, géométrie, mécanique, métier, normes, numérique, paramétrique, thermique, usinage
+
+**Casquette active** : Menuisier
+
+## Idées éclairées
+
+- [[Le gabarit est un G-code imprimé à l'échelle 1]] (score 3)
+- [[L'entraxe existe déjà, le module non]] (score 2)
+- [[L'offset du contour est la trajectoire CNC]] (score 2)
+- [[La plate-forme est une grammaire]] (score 2)
+- [[Le même offset sert la couche-limite et la trajectoire CNC]] (score 2)
+- [[Trois familles constructives bois]] (score 2)
 
 ## Diamètres remarquables (boîte à outils des dépôts)
 
@@ -28,14 +36,3 @@ Climats : CFD, assemblages, bois, données, durabilité, géométrie, mécanique
 - score 0.23 — [[Kits structuraux, la valeur dans la supply chain]] (climat : normes)
 - score 0.22 — [[Le profil de vitesse à la fermeture mesure la qualité d'un design]] (climat : CFD)
 - score 0.21 — [[Le même offset sert la couche-limite et la trajectoire CNC]] (climat : géométrie)
-
-## Faisceaux par phare
-
-**Charpentier** : [[Kits structuraux, la valeur dans la supply chain]], [[Kser, l'assemblage est un ressort paramétrable]], [[La combinaison dimensionne, pas le cas simple]], [[La plate-forme est une grammaire]], [[Le bois a une mémoire de sollicitation]], [[Le feu se dimensionne par la section résiduelle]], [[Les assemblages rompent par le groupe]], [[Trois familles constructives bois]], [[Un tableau normatif est un jeu de tests]]
-**Couvreur** : [[Couches croisées, la géométrie vaut l'épaisseur]], [[La vis sarking, géométrie de l'arrachement]], [[Le sarking, isoler la structure par dehors]]
-**Menuisier** : aucun îlot rattaché — terre à coloniser
-**Zingueur** : aucun îlot rattaché — terre à coloniser
-**Maçon** : aucun îlot rattaché — terre à coloniser
-**Geek** : aucun îlot rattaché — terre à coloniser
-**Développeur** : aucun îlot rattaché — terre à coloniser
-**Ingénieur CFD** : [[L'adhésion se règle pour imposer un angle de contact]], [[La force comme résidu de vitesse]], [[La friction par analogie élasto-plastique]], [[La LBM décrit le fluide par sa cinétique]], [[La stabilité numérique comme objet d'étude]], [[Le contact est d'abord une projection]], [[Le profil de vitesse à la fermeture mesure la qualité d'un design]], [[Les frontières immergées sont nées des valves cardiaques]], [[Les frontières immergées évitent de remailler quand la géométrie bouge]], [[Trois façons d'imposer une contrainte]], [[Valider par paliers de complexité]], [[Vérifier contre l'analytique à chaque pas]]

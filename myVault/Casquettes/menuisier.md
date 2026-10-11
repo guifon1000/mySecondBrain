@@ -3,6 +3,7 @@ domaines: [bois, usinage, géométrie, métier]
 id: 11
 description: 
 created: 2026-09-27
+active: true
 ---
 
 # Menuisier
