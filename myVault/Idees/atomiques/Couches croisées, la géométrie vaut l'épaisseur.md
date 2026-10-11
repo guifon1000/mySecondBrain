@@ -3,6 +3,4 @@ author: agent
 domaines: [thermique, matériaux]
 source: "[[_sources/SB-0057 — Solution Sarking]]"
 ---
-Deux couches croisées d'isolant rigide valent plus que le double de
-l'épaisseur simple : les joints décalés éliminent les fuites résiduelles.
-La géométrie de pose vaut l'épaisseur.
+Deux couches croisées de panneaux rigides valent plus que le double d'une couche simple : les joints décalés suppriment les fuites de continuité. La géométrie de pose compte autant que l'épaisseur.
