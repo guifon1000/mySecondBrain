@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>Archipel des idées</title>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root { --mer:#0d1b2a; --fil:#22303f; --txt:#dce8f5; --doux:#8fa3b8; --or:#ffd54f; --brume:#7d8fa3; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--mer); color:var(--txt);
+               font-family:"Segoe UI", system-ui, sans-serif; overflow:hidden; }
+  #bar { position:fixed; top:0; left:0; right:0; z-index:3; height:52px; padding:0 16px;
+         background:rgba(13,27,42,.92); display:flex; gap:12px; align-items:center;
+         border-bottom:1px solid var(--fil); }
+  #bar label { font-size:13px; color:var(--doux); }
+  select, input[type=search] { background:var(--mer); color:var(--or); border:1px solid #2b3a4b;
+         padding:6px 9px; font-size:14px; border-radius:4px; font-family:inherit; }
+  input[type=search] { color:var(--txt); width:300px; }
+  #stat { font-size:13px; color:var(--doux); }
+  #net { position:absolute; top:52px; bottom:0; left:0; right:0; }
+
+  /* panneau latéral : recherche + édition */
+  #panel { position:fixed; top:52px; right:0; bottom:0; width:440px; z-index:2;
+           background:rgba(13,27,42,.97); border-left:1px solid var(--fil);
+           transform:translateX(100%); transition:transform .18s ease; display:flex; flex-direction:column; }
+  #panel.ouvert { transform:translateX(0); }
+  #panel header { padding:12px 16px; border-bottom:1px solid var(--fil); display:flex;
+                  justify-content:space-between; align-items:center; }
+  #panel header h2 { font-size:16px; margin:0; font-weight:600; }
+  #fermer { background:none; border:none; color:var(--doux); font-size:20px; cursor:pointer; }
+  #panel .corps { padding:14px 16px; overflow-y:auto; flex:1; }
+  .meta { font-size:12px; color:var(--brume); margin-bottom:8px; }
+  .lecture { line-height:1.55; font-size:14px; }
+  .lecture h1,.lecture h2,.lecture h3 { color:var(--or); font-weight:600; margin:16px 0 6px; }
+  .lecture code { background:#16263a; padding:1px 4px; border-radius:3px; }
+  .lecture a { color:#8ecbff; }
+  textarea { width:100%; min-height:260px; background:#0a1521; color:var(--txt);
+             border:1px solid #2b3a4b; border-radius:4px; padding:10px; font-family:Consolas, monospace;
+             font-size:13px; line-height:1.5; resize:vertical; }
+  .boutons { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  button { background:#16263a; color:var(--txt); border:1px solid #2b3a4b; border-radius:4px;
+           padding:6px 12px; font-size:13px; cursor:pointer; font-family:inherit; }
+  button.primaire { border-color:var(--or); color:var(--or); }
+  button:disabled { opacity:.4; cursor:default; }
+  #msg { font-size:12px; color:var(--doux); margin-left:auto; }
+  .msg-err { color:#ff8a80 !important; }
+
+  /* résultats de recherche */
+  #resultats { padding:0 16px 12px; }
+  .section-titre { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+                   color:var(--brume); margin:14px 0 6px; }
+  .res { padding:8px 10px; border-radius:4px; margin-bottom:6px; cursor:pointer;
+         background:#0f2033; border:1px solid transparent; }
+  .res:hover { border-color:var(--fil); }
+  .res .t { font-size:14px; color:var(--txt); }
+  .res .e { font-size:12px; color:var(--doux); margin-top:3px; line-height:1.4; }
+  .res .p { font-size:11px; color:var(--brume); }
+  mark { background:rgba(255,213,79,.35); color:inherit; border-radius:2px; }
+</style></head>
+<body>
+<div id="bar">
+  <label for="casq">Casquette</label>
+  <select id="casq"></select>
+  <input id="q" type="search" placeholder="mot-clé : kigumi, sarking, offset…" autocomplete="off">
+  <span id="stat"></span>
+</div>
+<div id="net"></div>
+
+<aside id="panel">
+  <header><h2 id="ptitre"></h2><button id="fermer" title="fermer">×</button></header>
+  <div class="corps" id="pcorps"></div>
+</aside>
+
+<script>
+const DATA = __DATA__;
+const API = "/api";
+const SERVEUR = location.protocol.startsWith("http");
+
+/* ---------- carte ---------- */
+const nodes = new vis.DataSet(DATA.nodes);
+const edges = new vis.DataSet(DATA.edges);
+const net = new vis.Network(document.getElementById("net"), {nodes, edges}, {
+  physics: false,
+  interaction: { hover: true, navigationButtons: true, keyboard: true },
+  nodes: { font: { face: "Segoe UI" } },
+});
+net.fit({ animation: false });
+
+const sel = document.getElementById("casq");
+for (const [val, label] of DATA.options) {
+  const o = document.createElement("option"); o.value = val; o.textContent = label; sel.appendChild(o);
+}
+sel.value = DATA.default;
+
+let eclairage = DATA.etats[sel.value];
+function appliquer(nom) {
+  eclairage = DATA.etats[nom];
+  const nNodes = DATA.nodes.map(n => {
+    const on = eclairage[n.id.slice(5)];
+    return { id: n.id,
+      size: on ? n._size : n._size_off,
+      color: { background: on ? n._fond : "#2b3a4b", border: n._bord },
+      font: { color: on ? "#dce8f5" : "#7d8fa3", size: on ? 28 : 19 } };
+  });
+  const nEdges = DATA.edges.map(e => {
+    const u = eclairage[e._u], v = eclairage[e._v];
+    if (e._kind === "couvee") {
+      const on = u || v;
+      return { id: e.id, color: { color: on ? "#e8a13c" : "#2b3a4b", opacity: on ? 0.9 : 0.25 }, width: on ? 2.5 : 0.8 };
+    }
+    const on = u && v;
+    return { id: e.id, color: { color: "#8fa3b8", opacity: on ? 0.9 : 0.25 }, width: 0.9, hidden: !on };
+  });
+  nodes.update(nNodes); edges.update(nEdges);
+  const nLit = Object.values(eclairage).filter(Boolean).length;
+  document.getElementById("stat").textContent = `${nLit} idées éclairées / ${Object.keys(eclairage).length}`;
+}
+sel.addEventListener("change", () => appliquer(sel.value));
+appliquer(sel.value);
+
+/* ---------- panneau ---------- */
+const panel = document.getElementById("panel");
+const pcorps = document.getElementById("pcorps");
+const ptitre = document.getElementById("ptitre");
+document.getElementById("fermer").onclick = () => panel.classList.remove("ouvert");
+
+function echapper(s) { return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function surligner(texte, mots) {
+  let out = echapper(texte);
+  for (const m of mots) {
+    if (!m) continue;
+    const re = new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    out = out.replace(re, x => `<mark>${x}</mark>`);
+  }
+  return out;
+}
+
+let courante = null;
+async function ouvrirIdee(titre, mots = []) {
+  panel.classList.add("ouvert");
+  ptitre.textContent = titre;
+  if (!SERVEUR) {
+    pcorps.innerHTML = `<p class="meta">Édition indisponible : lance <code>python tools/archipel_serve.py</code> puis ouvre http://127.0.0.1:8765/</p>`;
+    return;
+  }
+  const r = await fetch(`${API}/idee?titre=${encodeURIComponent(titre)}`);
+  if (!r.ok) { pcorps.innerHTML = `<p class="meta">Idée introuvable.</p>`; return; }
+  courante = await r.json();
+  afficherLecture(mots);
+}
+
+function afficherLecture(mots = []) {
+  const promue = courante.promue;
+  pcorps.innerHTML = `
+    <div class="meta">${promue ? "idée promue — lecture seule" : "idée agent — modifiable"} · ${echapper(courante.chemin)}</div>
+    <div class="lecture" id="rendu"></div>
+    <div class="boutons">
+      <button class="primaire" id="editer" ${promue ? "disabled" : ""}>Éditer</button>
+      <span id="msg"></span>
+    </div>`;
+  const corps = courante.corps;
+  document.getElementById("rendu").innerHTML = marked.parse(corps);
+  if (mots.length) {
+    // surlignage dans le rendu : sur le texte brut déjà parsé, après parse
+    const rendu = document.getElementById("rendu");
+    const walk = n => {
+      if (n.nodeType === 3) {
+        const t = n.textContent;
+        let html = surligner(t, mots);
+        if (html !== echapper(t)) {
+          const span = document.createElement("span"); span.innerHTML = html;
+          n.replaceWith(span);
+        }
+      } else if (n.nodeType === 1 && !["CODE","PRE"].includes(n.tagName)) {
+        [...n.childNodes].forEach(walk);
+      }
+    };
+    walk(rendu);
+  }
+  const b = document.getElementById("editer");
+  if (b) b.onclick = afficherEdition;
+}
+
+function afficherEdition() {
+  pcorps.innerHTML = `
+    <div class="meta">Titre = claim (une affirmation). Le frontmatter reste intact.</div>
+    <input type="text" id="ititre" value="${echapper(courante.titre)}"
+           style="width:100%;margin-bottom:10px;background:#0a1521;color:var(--txt);border:1px solid #2b3a4b;padding:7px;border-radius:4px;font-family:inherit;font-size:14px">
+    <textarea id="tcorps">${echapper(courante.corps)}</textarea>
+    <div class="boutons">
+      <button class="primaire" id="enregistrer">Enregistrer</button>
+      <button id="annuler">Annuler</button>
+      <span id="msg"></span>
+    </div>`;
+  document.getElementById("annuler").onclick = () => afficherLecture();
+  document.getElementById("enregistrer").onclick = enregistrer;
+}
+
+async function enregistrer() {
+  const msg = document.getElementById("msg");
+  const titre = courante.titre;
+  const nouveau = document.getElementById("ititre").value.trim();
+  const corps = document.getElementById("tcorps").value;
+  msg.textContent = "enregistrement…"; msg.className = "";
+  const r = await fetch(`${API}/idee`, { method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ titre, corps, nouveau_titre: nouveau !== titre ? nouveau : null }) });
+  const data = await r.json();
+  if (!r.ok) { msg.textContent = data.erreur || "échec"; msg.className = "msg-err"; return; }
+  courante = data;
+  msg.textContent = "enregistré — recharge la page pour rafraîchir la carte";
+}
+
+/* ---------- recherche ---------- */
+const q = document.getElementById("q");
+let t0 = null;
+q.addEventListener("input", () => { clearTimeout(t0); t0 = setTimeout(chercher, 250); });
+
+async function chercher() {
+  const terme = q.value.trim();
+  const mots = terme.split(/\s+/).filter(Boolean);
+  // surbrillance des idées sur la carte
+  if (!mots.length) { appliquer(sel.value); panel.classList.remove("ouvert"); return; }
+  if (!SERVEUR) { pcorps.innerHTML = `<p class="meta">Recherche indisponible hors serveur.</p>`; panel.classList.add("ouvert"); return; }
+  const r = await fetch(`${API}/cherche?q=${encodeURIComponent(terme)}`);
+  const d = await r.json();
+  const idees = new Set(d.idees.map(i => i.titre));
+  const nNodes = DATA.nodes.map(n => {
+    const hit = idees.has(n.id.slice(5));
+    return { id: n.id, color: { background: hit ? "#ffd54f" : (eclairage[n.id.slice(5)] ? n._fond : "#1d2b3b"),
+                                border: hit ? "#ffd54f" : n._bord },
+             size: hit ? n._size + 6 : (eclairage[n.id.slice(5)] ? n._size : n._size_off) };
+  });
+  nodes.update(nNodes);
+  if (idees.size) net.fit({ nodes: DATA.nodes.filter(n => idees.has(n.id.slice(5))).map(n => n.id), animation: true });
+
+  panel.classList.add("ouvert");
+  ptitre.textContent = `« ${terme} »`;
+  const sec = (titre, items) => items.length ? `<div class="section-titre">${titre}</div>` + items.join("") : "";
+  const htmlIdees = d.idees.map(i => `
+    <div class="res" data-idee="${echapper(i.titre)}">
+      <div class="t">${surligner(i.titre, mots)}</div>
+      <div class="e">${surligner(i.extrait, mots)}</div></div>`);
+  const htmlPdf = d.pdf.map(p => `
+    <div class="res" data-pdf="${echapper(p.fichier)}" data-page="${p.pages[0]}" data-source="${p.source}">
+      <div class="t">${echapper(p.titre)}</div>
+      <div class="p">${p.source === "biblio" ? "biblio" : "E:/pdf_library"} · pages ${p.pages.slice(0, 8).join(", ")}${p.pages.length > 8 ? " …" : ""}</div>
+      <div class="e">${surligner(p.extrait.replace(/[«»]/g, ""), mots)}</div></div>`);
+  pcorps.innerHTML = `<div id="resultats">
+    ${sec(`Idées (${d.idees.length})`, htmlIdees)}
+    ${sec(`Documents (${d.pdf.length})`, htmlPdf)}
+    ${!d.idees.length && !d.pdf.length ? '<p class="meta">Aucun résultat.</p>' : ""}
+    </div>`;
+  pcorps.querySelectorAll("[data-idee]").forEach(el => el.onclick = () => ouvrirIdee(el.dataset.idee, mots));
+  pcorps.querySelectorAll("[data-pdf]").forEach(el => el.onclick = () => {
+    window.open(`/pdf?p=${encodeURIComponent(el.dataset.pdf)}#page=${el.dataset.page}`, "_blank");
+  });
+}
+
+/* clic sur une idée de la carte : ouvre le panneau */
+net.on("click", p => {
+  if (p.nodes.length) {
+    const id = p.nodes[0];
+    if (id.startsWith("idee:")) ouvrirIdee(id.slice(5));
+  }
+});
+</script>
+</body></html>

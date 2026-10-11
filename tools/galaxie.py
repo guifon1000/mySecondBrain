@@ -344,84 +344,7 @@ def eclairage_par_casquette(casq, ideas):
     return etats
 
 
-HTML_GABARIT = """<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
-<title>Archipel des idées</title>
-<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
-<style>
-  html, body { margin:0; height:100%; background:#0d1b2a; color:#dce8f5;
-               font-family: "Segoe UI", system-ui, sans-serif; }
-  #bar { position:fixed; top:0; left:0; right:0; z-index:2; padding:10px 16px;
-         background:rgba(13,27,42,.85); display:flex; gap:14px; align-items:center;
-         border-bottom:1px solid #22303f; }
-  #bar label { font-size:14px; color:#8fa3b8; }
-  #bar select { background:#0d1b2a; color:#ffd54f; border:1px solid #2b3a4b;
-                padding:5px 8px; font-size:14px; border-radius:4px; }
-  #stat { font-size:13px; color:#8fa3b8; }
-  #net { position:absolute; top:52px; bottom:0; left:0; right:0; }
-</style></head>
-<body>
-<div id="bar">
-  <label for="casq">Casquette active</label>
-  <select id="casq"></select>
-  <span id="stat"></span>
-</div>
-<div id="net"></div>
-<script>
-const DATA = __DATA__;
-const nodes = new vis.DataSet(DATA.nodes);
-const edges = new vis.DataSet(DATA.edges);
-const net = new vis.Network(document.getElementById("net"), {nodes, edges}, {
-  physics: false,
-  interaction: { hover: true, navigationButtons: true, keyboard: true },
-  nodes: { font: { face: "Segoe UI" } },
-});
-net.fit({ animation: false });
-
-const sel = document.getElementById("casq");
-for (const [val, label] of DATA.options) {
-  const o = document.createElement("option");
-  o.value = val; o.textContent = label; sel.appendChild(o);
-}
-sel.value = DATA.default;
-
-function appliquer(nom) {
-  const lit = DATA.etats[nom];
-  const nNodes = [], nEdges = [];
-  for (const n of DATA.nodes) {
-    const on = lit[n.id.slice(5)];
-    nNodes.push({
-      id: n.id,
-      size: on ? n._size : n._size_off,
-      color: { background: on ? n._fond : "#2b3a4b", border: n._bord },
-      font: { color: on ? "#dce8f5" : "#7d8fa3", size: on ? 28 : 19 },
-      title: n.title + (nom !== "__aucune__" ? `<br>éclairage : ${on ? "oui" : "non"}` : ""),
-    });
-  }
-  for (const e of DATA.edges) {
-    const u = lit[e._u], v = lit[e._v];
-    let on = false, col = "#2b3a4b", w = 0.8, hidden = false;
-    if (e._kind === "couvee") {
-      on = u || v;
-      col = on ? "#e8a13c" : "#2b3a4b"; w = on ? 2.5 : 0.8;
-    } else {
-      on = u && v;
-      col = "#8fa3b8"; w = 0.9; hidden = !on;
-    }
-    nEdges.push({ id: e.id, color: { color: col, opacity: on ? 0.9 : 0.25 },
-                  width: w, hidden: hidden });
-  }
-  nodes.update(nNodes);
-  edges.update(nEdges);
-  const nLit = Object.values(lit).filter(Boolean).length;
-  document.getElementById("stat").textContent =
-    `${nLit} idées éclairées / ${Object.keys(lit).length}`;
-}
-sel.addEventListener("change", () => appliquer(sel.value));
-appliquer(sel.value);
-</script>
-</body></html>
-"""
+GABARIT_UI = Path(__file__).resolve().parent / "archipel_ui.html"
 
 
 def disposition_html(G, largeur=1500, hauteur=950):
@@ -473,7 +396,8 @@ def dessiner_html(casq, ideas, crosses, G, pos, active):
     data = {"nodes": nodes, "edges": edges, "etats": etats,
             "options": options, "default": default}
     payload = json.dumps(data, ensure_ascii=False)
-    OUT_HTML.write_text(HTML_GABARIT.replace("__DATA__", payload), encoding="utf-8")
+    OUT_HTML.write_text(GABARIT_UI.read_text(encoding="utf-8").replace("__DATA__", payload),
+                        encoding="utf-8")
     print(f"interactif -> {OUT_HTML}")
 
 
