@@ -394,7 +394,7 @@ function appliquer(nom) {
       id: n.id,
       size: on ? n._size : n._size_off,
       color: { background: on ? n._fond : "#2b3a4b", border: n._bord },
-      font: { color: on ? "#dce8f5" : "#4a5a6b", size: on ? 14 : 9 },
+      font: { color: on ? "#dce8f5" : "#7d8fa3", size: on ? 28 : 19 },
       title: n.title + (nom !== "__aucune__" ? `<br>éclairage : ${on ? "oui" : "non"}` : ""),
     });
   }
@@ -424,23 +424,34 @@ appliquer(sel.value);
 """
 
 
+def disposition_html(G, largeur=1500, hauteur=950):
+    """Positions en pixels pour la page : layout plus écarté, étalé sur l'écran."""
+    p = nx.spring_layout(G, k=2.0, iterations=800, weight="weight", seed=42)
+    xs = [v[0] for v in p.values()]
+    ys = [v[1] for v in p.values()]
+    mx = max(max(abs(x) for x in xs), 1e-9)
+    my = max(max(abs(y) for y in ys), 1e-9)
+    return {n: (v[0] / mx * largeur, v[1] / my * hauteur) for n, v in p.items()}
+
+
 def dessiner_html(casq, ideas, crosses, G, pos, active):
     """Archipel HTML autonome : une page, un sélecteur de casquette, positions figées."""
     _, climate_color = climats_couleurs(ideas)
     etats = eclairage_par_casquette(casq, ideas)
+    pos_px = disposition_html(G)
 
     def hex_(c):
         return "#%02x%02x%02x" % tuple(int(x * 255) for x in c[:3])
 
     nodes = []
     for n, d in ideas.items():
-        x, y = pos[n]
+        x, y = pos_px[n]
         col = hex_(climate_color[d["doms"][0]])
         nodes.append({
             "id": f"idee:{n}",
             "label": wrap(n, 26).replace("\n", " "),
             "shape": "diamond" if d["satellite"] else "dot",
-            "x": x * 40, "y": -y * 40,  # vis : y vers le bas
+            "x": x, "y": -y,  # vis : y vers le bas
             "size": 4 + d["diameter"] / 55,
             "_size": 4 + d["diameter"] / 55,
             "_size_off": 3 + d["diameter"] / 110,
@@ -448,7 +459,7 @@ def dessiner_html(casq, ideas, crosses, G, pos, active):
             "_bord": LIT_LINK if d["satellite"] else MER,
             "title": f"{n}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
                      f"<br>domaines : {', '.join(d['doms'])}",
-            "font": {"color": "#dce8f5", "size": 14},
+            "font": {"color": "#dce8f5", "size": 28},
         })
     edges = []
     for i, (u, v, dd) in enumerate(G.edges(data=True)):
