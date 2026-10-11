@@ -328,61 +328,141 @@ def ecrire_note(casq, ideas, crosses, active):
     print(f"note -> {OUT_NOTE}")
 
 
+def eclairage_par_casquette(casq, ideas):
+    """{nom_casquette | '__aucune__': {idee: bool éclairée}} — pour chaque état."""
+    etats = {}
+    for nom in list(casq) + [None]:
+        doms = set(casq[nom]["doms"]) if nom else set()
+        for t, d in ideas.items():
+            if nom is None:
+                lit = True
+            else:
+                shared = len(set(d["doms"]) & doms)
+                bonus = 3 if nom in d["lignee"] else 0
+                lit = shared + bonus >= SCORE_SEUIL
+            etats.setdefault(nom or "__aucune__", {})[t] = lit
+    return etats
+
+
+HTML_GABARIT = """<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>Archipel des idées</title>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+  html, body { margin:0; height:100%; background:#0d1b2a; color:#dce8f5;
+               font-family: "Segoe UI", system-ui, sans-serif; }
+  #bar { position:fixed; top:0; left:0; right:0; z-index:2; padding:10px 16px;
+         background:rgba(13,27,42,.85); display:flex; gap:14px; align-items:center;
+         border-bottom:1px solid #22303f; }
+  #bar label { font-size:14px; color:#8fa3b8; }
+  #bar select { background:#0d1b2a; color:#ffd54f; border:1px solid #2b3a4b;
+                padding:5px 8px; font-size:14px; border-radius:4px; }
+  #stat { font-size:13px; color:#8fa3b8; }
+  #net { position:absolute; top:52px; bottom:0; left:0; right:0; }
+</style></head>
+<body>
+<div id="bar">
+  <label for="casq">Casquette active</label>
+  <select id="casq"></select>
+  <span id="stat"></span>
+</div>
+<div id="net"></div>
+<script>
+const DATA = __DATA__;
+const nodes = new vis.DataSet(DATA.nodes);
+const edges = new vis.DataSet(DATA.edges);
+const net = new vis.Network(document.getElementById("net"), {nodes, edges}, {
+  physics: false,
+  interaction: { hover: true, navigationButtons: true, keyboard: true },
+  nodes: { font: { face: "Segoe UI" } },
+});
+net.fit({ animation: false });
+
+const sel = document.getElementById("casq");
+for (const [val, label] of DATA.options) {
+  const o = document.createElement("option");
+  o.value = val; o.textContent = label; sel.appendChild(o);
+}
+sel.value = DATA.default;
+
+function appliquer(nom) {
+  const lit = DATA.etats[nom];
+  const nNodes = [], nEdges = [];
+  for (const n of DATA.nodes) {
+    const on = lit[n.id.slice(5)];
+    nNodes.push({
+      id: n.id,
+      size: on ? n._size : n._size_off,
+      color: { background: on ? n._fond : "#2b3a4b", border: n._bord },
+      font: { color: on ? "#dce8f5" : "#4a5a6b", size: on ? 14 : 9 },
+      title: n.title + (nom !== "__aucune__" ? `<br>éclairage : ${on ? "oui" : "non"}` : ""),
+    });
+  }
+  for (const e of DATA.edges) {
+    const u = lit[e._u], v = lit[e._v];
+    let on = false, col = "#2b3a4b", w = 0.8, hidden = false;
+    if (e._kind === "couvee") {
+      on = u || v;
+      col = on ? "#e8a13c" : "#2b3a4b"; w = on ? 2.5 : 0.8;
+    } else {
+      on = u && v;
+      col = "#8fa3b8"; w = 0.9; hidden = !on;
+    }
+    nEdges.push({ id: e.id, color: { color: col, opacity: on ? 0.9 : 0.25 },
+                  width: w, hidden: hidden });
+  }
+  nodes.update(nNodes);
+  edges.update(nEdges);
+  const nLit = Object.values(lit).filter(Boolean).length;
+  document.getElementById("stat").textContent =
+    `${nLit} idées éclairées / ${Object.keys(lit).length}`;
+}
+sel.addEventListener("change", () => appliquer(sel.value));
+appliquer(sel.value);
+</script>
+</body></html>
+"""
+
+
 def dessiner_html(casq, ideas, crosses, G, pos, active):
-    from pyvis.network import Network
-
+    """Archipel HTML autonome : une page, un sélecteur de casquette, positions figées."""
     _, climate_color = climats_couleurs(ideas)
-    neutre = active is None
-    net = Network(height="850px", width="100%", bgcolor=MER,
-                  font_color="#dce8f5", select_menu=False,
-                  filter_menu=False, cdn_resources="remote")
+    etats = eclairage_par_casquette(casq, ideas)
 
-    def lit(n):
-        return neutre or ideas[n]["eclairee"]
+    def hex_(c):
+        return "#%02x%02x%02x" % tuple(int(x * 255) for x in c[:3])
 
+    nodes = []
     for n, d in ideas.items():
         x, y = pos[n]
-        on = lit(n)
-        col = climate_color[d["doms"][0]]
-        col_hex = "#%02x%02x%02x" % tuple(int(c * 255) for c in col[:3])
-        if d["satellite"]:
-            fond = col_hex if on else DIM
-            bord = LIT_LINK
-            forme = "diamond"
-        else:
-            fond = col_hex if on else DIM
-            bord = MER
-            forme = "dot"
-        net.add_node(
-            f"idee:{n}",
-            label=wrap(n, 26).replace("\n", " "),
-            shape=forme,
-            size=4 + d["diameter"] / 55 if on else 3 + d["diameter"] / 110,
-            color={"background": fond, "border": bord},
-            font={"color": "#dce8f5" if on else DIM_TXT, "size": 14 if on else 9},
-            title=f"{n}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
-                  f"<br>domaines : {', '.join(d['doms'])}"
-                  + (f"<br>score casquette : {d['score']}" if d["score"] is not None else ""),
-            x=x * 40, y=y * 40,
-        )
-    for u, v, dd in G.edges(data=True):
-        cu, cv = f"idee:{u}", f"idee:{v}"
-        if dd["kind"] == "couvee":
-            on = lit(u) or lit(v)
-            net.add_edge(cu, cv, color=LIT_LINK if on else DIM,
-                         width=2.5 if on else 0.8, title="couvée")
-        elif not neutre and lit(u) and lit(v):
-            shared = len(set(ideas[u]["doms"]) & set(ideas[v]["doms"]))
-            net.add_edge(cu, cv, color=LIEN_LIT, width=0.9,
-                         title=f"courant ({shared} domaine(s) partagé(s))")
-    net.set_options(json.dumps({
-        "physics": {"barnesHut": {"gravitationalConstant": -9000,
-                                  "springLength": 140,
-                                  "springStrength": 0.004,
-                                  "damping": 0.55}},
-        "interaction": {"hover": True},
-    }))
-    net.write_html(str(OUT_HTML), notebook=False)
+        col = hex_(climate_color[d["doms"][0]])
+        nodes.append({
+            "id": f"idee:{n}",
+            "label": wrap(n, 26).replace("\n", " "),
+            "shape": "diamond" if d["satellite"] else "dot",
+            "x": x * 40, "y": -y * 40,  # vis : y vers le bas
+            "size": 4 + d["diameter"] / 55,
+            "_size": 4 + d["diameter"] / 55,
+            "_size_off": 3 + d["diameter"] / 110,
+            "_fond": col,
+            "_bord": LIT_LINK if d["satellite"] else MER,
+            "title": f"{n}<br>climat : {d['doms'][0]} · outils : {d['tool_score']:.2f}"
+                     f"<br>domaines : {', '.join(d['doms'])}",
+            "font": {"color": "#dce8f5", "size": 14},
+        })
+    edges = []
+    for i, (u, v, dd) in enumerate(G.edges(data=True)):
+        edges.append({"id": f"e{i}", "from": f"idee:{u}", "to": f"idee:{v}",
+                      "_u": u, "_v": v, "_kind": dd["kind"],
+                      "arrows": "", "smooth": False})
+
+    casq_noms = list(casq)
+    options = [[nom, nom] for nom in casq_noms] + [["__aucune__", "aucune (carte neutre)"]]
+    default = next((nom for nom in casq_noms if casq[nom]["active"]), "__aucune__")
+    data = {"nodes": nodes, "edges": edges, "etats": etats,
+            "options": options, "default": default}
+    payload = json.dumps(data, ensure_ascii=False)
+    OUT_HTML.write_text(HTML_GABARIT.replace("__DATA__", payload), encoding="utf-8")
     print(f"interactif -> {OUT_HTML}")
 
 
