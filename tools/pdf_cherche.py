@@ -93,6 +93,8 @@ def index(incremental: bool = True):
     for i, path in enumerate(pdfs, 1):
         posix = path.as_posix()
         seen.add(posix.lower())
+        if path.name.startswith("._"):
+            continue  # déchets macOS (AppleDouble), pas de vrais PDF
         try:
             st = path.stat()
         except OSError:
@@ -143,8 +145,9 @@ def index(incremental: bool = True):
         eta = dt / i * (total - i)
         print(f"[{i}/{total}] {path.name} ({n_pages} p.) — reste ~{eta/60:.0f} min", end="\r")
     # purge des fichiers disparus
+    # purge : fichiers disparus + déchets macOS déjà enregistrés
     gone = [r["id"] for r in conn.execute("SELECT id, path FROM files")
-            if r["path"].lower() not in seen]
+            if r["path"].lower() not in seen or Path(r["path"]).name.startswith("._")]
     for fid in gone:
         delete_file(conn, fid)
     conn.commit()
