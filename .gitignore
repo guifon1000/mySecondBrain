@@ -4,15 +4,21 @@ __pycache__/
 *.pyc
 .env
 server.log
+lib/
+
 # Vault Obsidian — on versionne la PENSÉE structurée, pas les données
+# (les artefacts app et les données personnelles restent hors git)
 myVault/*
 !myVault/Idees/
 !myVault/Casquettes/
 !myVault/Notes/
+!myVault/Projets/
 myVault/Idees/archive/
+myVault/Idees/atomiques/_trash/
 myVault/biblio/
 myVault/_sources/
 myVault/Inbox/
 myVault/Archives/
 myVault/Projets/*/
-# Documents à ingérer — données personnelles, hors git
+myVault/Casquettes/*/
+myVault/Archipel.html
