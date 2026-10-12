@@ -105,13 +105,34 @@ for CFD.md` — rédigée par l'agent sur demande explicite, née `author:
 user`, structurée pour être étoffée et scindée (méthodes, résultats,
 leçons pour Hex, pages de référence, questions ouvertes).
 
-## Travail restant
+## Travail restant (stack affinée, tri des solutions équivalentes)
 
-- Migrer les fiches de `_sources/` vers `Fiches/sources/` (format v3).
-- Réécrire l'app : capture → fiches dans le vault, DB = index dérivé.
-- UI de l'Archipel : relier à la souris, valider/supprimer les liens
-  suggérés, créer des fiches `note`, afficher les liens pdf/code.
-- OCR des scans muets (325 sur E:, les restants du vault).
+1. **lint_fiches.py** (nouveau, première étape) : liens de code périmés
+   (détection via git, à la Link), citations vérifiées contre les pages
+   PDF (à la Cortex), fiches orphelines. Sécurise les fiches restantes
+   pendant la refonte.
+2. **Migrer** les fiches de `_sources/` vers `Fiches/sources/` (format v3).
+3. **UI de l'Archipel** : relier à la souris, valider/supprimer les liens
+   suggérés, créer des fiches, **anti-doublons à la création** (la
+   recherche montre les fiches proches avant de créer), afficher les
+   liens pdf/code, section « lacunes & contre-arguments » dans les fiches
+   source.
+4. **Réécrire l'app** : capture → fiches dans le vault, DB = index dérivé.
+5. **OCR** des scans muets (325 sur E:, les restants du vault).
+
+### Refusés (tri des équivalents, 2026-10-11)
+
+- Recherche vectorielle (Khoj, qmd) : FTS5 tient ; le jour où une vraie
+  question rate, on l'ajoutera.
+- Curation automatique du vault, minage transversal de papiers (LENS) :
+  de la pensée déléguée — contraire à la v3.
+- Backends typés (owletto, Binder) : markdown source + SQLite index, déjà
+  notre doctrine.
+- Hébergé / multi-agents (Dexio, tracecraft) : tout local, un humain,
+  un agent.
+- Ranking par usage/récence : mesuré et refusé par Link — néfaste sur des
+  fiches durables.
+- Capture Telegram : hors plan pour l'instant.
 
 ## Critère de réussite (proposition)
 
