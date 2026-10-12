@@ -2,24 +2,29 @@
 généré: par tools/galaxie.py
 ---
 
-# Archipel des idées
+# Archipel
 
 ![[galaxie-idees.png]]
 
-Une seule **casquette active** éclaire la carte : ses idées sont
-lisibles, leurs liens (courants et couvées) sont tracés. Les autres
-idées restent visibles, atténuées. Changer d'éclairage :
-`python tools/galaxie.py --casquette "Nom"`.
+Vue statique. La carte interactive : `python tools/archipel_serve.py`.
 
-Climats : assemblages, paramétrique
+## Liens
 
-**Casquette active** : Menuisier
+- [[Gabarit du garde-corps du chantier E]] ↔ [[La maison à ossature version kiwari]]
+- [[La maison à ossature version kiwari]] ↔ [[Gabarit du garde-corps du chantier E]]
+- [[La maison à ossature version kiwari]] ↔ [[L'ossature à joints générés (kigumi plate-forme)]]
+- [[SB-0052 — Eurocode 5 Calcul des structures en bois]] ↔ [[rincewind]]
+- [[SB-0052 — Eurocode 5 Calcul des structures en bois]] ↔ [[sapientpearwood]]
+- [[SB-0053 — Construction de maisons à ossature bois]] ↔ [[rincewind]]
+- [[SB-0053 — Construction de maisons à ossature bois]] ↔ [[sapientpearwood]]
+- [[SB-0054 — Kigumi assemblages japonais]] ↔ [[renardiere]]
+- [[SB-0054 — Kigumi assemblages japonais]] ↔ [[rincewind]]
+- [[SB-0055 — Computational Contact Mechanics]] ↔ [[rincewind]]
+- [[SB-0056 — The NURBS Book]] ↔ [[rincewind]]
+- [[SB-0057 — Solution Sarking]] ↔ [[sapientpearwood]]
+- [[SB-0060 — Offset de polylignes]] ↔ [[renardiere]]
+- [[SB-0060 — Offset de polylignes]] ↔ [[rincewind]]
 
-## Idées éclairées
+## Suggestions
 
-- [[La maison à ossature version kiwari]] (score 1)
-
-## Diamètres remarquables (boîte à outils des dépôts)
-
-- score 0.67 — [[La maison à ossature version kiwari]] (climat : paramétrique)
-- score 0.42 — [[L'ossature à joints générés (kigumi plate-forme)]] (climat : assemblages)
+- [[L'ossature à joints générés (kigumi plate-forme)]] ~ [[La maison à ossature version kiwari]]

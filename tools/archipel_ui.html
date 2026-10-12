@@ -1,129 +1,246 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
-<title>Archipel des idées</title>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Archipel</title>
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 <style>
-  :root { --mer:#0d1b2a; --fil:#22303f; --txt:#dce8f5; --doux:#8fa3b8; --or:#ffd54f; --brume:#7d8fa3; }
-  * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--mer); color:var(--txt);
-               font-family:"Segoe UI", system-ui, sans-serif; overflow:hidden; }
-  #bar { position:fixed; top:0; left:0; right:0; z-index:3; height:52px; padding:0 16px;
-         background:rgba(13,27,42,.92); display:flex; gap:12px; align-items:center;
-         border-bottom:1px solid var(--fil); }
-  #bar label { font-size:13px; color:var(--doux); }
-  select, input[type=search] { background:var(--mer); color:var(--or); border:1px solid #2b3a4b;
-         padding:6px 9px; font-size:14px; border-radius:4px; font-family:inherit; }
-  input[type=search] { color:var(--txt); width:300px; }
-  #stat { font-size:13px; color:var(--doux); }
-  #net { position:absolute; top:52px; bottom:0; left:0; right:0; }
+  :root {
+    --mer: #0d1b2a;        /* fond */
+    --creux: #101f30;      /* panneaux */
+    --plage: #16293f;      /* éléments internes */
+    --fil: #23384e;        /* bordures */
+    --ecume: #dce8f5;      /* texte principal */
+    --brume: #8fa3b8;      /* texte secondaire */
+    --lune: #7d8fa3;       /* texte atténué */
+    --or: #ffd54f;         /* accent actif */
+    --sable: #e8a13c;      /* accent couvée */
+    --corail: #ff8a80;     /* erreur */
+    --idee: #ffd54f; --note: #7ec8e3; --source: #7fd4a8; --capture: #c39bd3;
+    --projet: #a0aec0; --casquette: #f0b27a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: var(--mer); color: var(--ecume);
+    font-family: "Segoe UI", system-ui, sans-serif; }
 
-  /* panneau latéral : recherche + édition */
-  #panel { position:fixed; top:52px; right:0; bottom:0; width:440px; z-index:2;
-           background:rgba(13,27,42,.97); border-left:1px solid var(--fil);
-           transform:translateX(100%); transition:transform .18s ease; display:flex; flex-direction:column; }
-  #panel.ouvert { transform:translateX(0); }
-  #panel header { padding:12px 16px; border-bottom:1px solid var(--fil); display:flex;
-                  justify-content:space-between; align-items:center; }
-  #panel header h2 { font-size:16px; margin:0; font-weight:600; }
-  #fermer { background:none; border:none; color:var(--doux); font-size:20px; cursor:pointer; }
-  #panel .corps { padding:14px 16px; overflow-y:auto; flex:1; }
-  .meta { font-size:12px; color:var(--brume); margin-bottom:8px; }
-  .lecture { line-height:1.55; font-size:14px; }
-  .lecture h1,.lecture h2,.lecture h3 { color:var(--or); font-weight:600; margin:16px 0 6px; }
-  .lecture code { background:#16263a; padding:1px 4px; border-radius:3px; }
-  .lecture a { color:#8ecbff; }
-  textarea { width:100%; min-height:260px; background:#0a1521; color:var(--txt);
-             border:1px solid #2b3a4b; border-radius:4px; padding:10px; font-family:Consolas, monospace;
-             font-size:13px; line-height:1.5; resize:vertical; }
-  .boutons { display:flex; gap:8px; margin-top:10px; align-items:center; }
-  button { background:#16263a; color:var(--txt); border:1px solid #2b3a4b; border-radius:4px;
-           padding:6px 12px; font-size:13px; cursor:pointer; font-family:inherit; }
-  button.primaire { border-color:var(--or); color:var(--or); }
-  button:disabled { opacity:.4; cursor:default; }
-  #msg { font-size:12px; color:var(--doux); margin-left:auto; }
-  .msg-err { color:#ff8a80 !important; }
+  /* ---------- barre supérieure ---------- */
+  #bar { position: fixed; inset: 0 0 auto 0; height: 56px; z-index: 10;
+    display: flex; align-items: center; gap: 12px; padding: 0 18px;
+    background: color-mix(in srgb, var(--mer) 92%, transparent);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--fil); }
+  #bar .logo { font-size: 17px; font-weight: 600; letter-spacing: .02em;
+    color: var(--ecume); user-select: none; }
+  #bar .logo span { color: var(--or); }
+  #bar label { color: var(--brume); font-size: 13px; }
+  select, input[type=search], input[type=text], textarea {
+    background: var(--creux); color: var(--ecume);
+    border: 1px solid var(--fil); border-radius: 8px;
+    font-family: inherit; font-size: 14px; }
+  select { padding: 7px 10px; color: var(--or); }
+  input[type=search] { padding: 7px 12px; width: 290px; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--or); }
+  #stat { font-size: 13px; color: var(--brume); margin-left: auto; }
+  .btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--fil);
+    background: var(--creux); color: var(--ecume); font-size: 13.5px;
+    cursor: pointer; transition: border-color .15s, background .15s; }
+  .btn:hover { border-color: var(--brume); }
+  .btn.primaire { border-color: var(--or); color: var(--or); }
+  .btn.primaire:hover { background: color-mix(in srgb, var(--or) 12%, var(--creux)); }
+  .btn.actif { background: var(--or); color: var(--mer); border-color: var(--or); }
+  .btn.mini { padding: 3px 9px; font-size: 12px; border-radius: 6px; }
 
-  /* résultats de recherche */
-  #resultats { padding:0 16px 12px; }
-  .section-titre { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
-                   color:var(--brume); margin:14px 0 6px; }
-  .res { padding:8px 10px; border-radius:4px; margin-bottom:6px; cursor:pointer;
-         background:#0f2033; border:1px solid transparent; }
-  .res:hover { border-color:var(--fil); }
-  .res .t { font-size:14px; color:var(--txt); }
-  .res .e { font-size:12px; color:var(--doux); margin-top:3px; line-height:1.4; }
-  .res .p { font-size:11px; color:var(--brume); }
-  mark { background:rgba(255,213,79,.35); color:inherit; border-radius:2px; }
-</style></head>
+  /* ---------- carte ---------- */
+  #net { position: fixed; inset: 56px 0 0 0; }
+  #mode { position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+    z-index: 9; padding: 9px 18px; border-radius: 999px;
+    background: var(--or); color: var(--mer); font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 4px 18px rgba(0,0,0,.4); display: none; }
+  #mode.on { display: block; }
+
+  /* ---------- panneau latéral ---------- */
+  #panel { position: fixed; top: 56px; right: 0; bottom: 0; width: 460px; z-index: 8;
+    background: var(--creux); border-left: 1px solid var(--fil);
+    transform: translateX(102%); transition: transform .2s ease;
+    display: flex; flex-direction: column; }
+  #panel.ouvert { transform: translateX(0); }
+  #panel header { padding: 14px 18px 10px; border-bottom: 1px solid var(--fil); }
+  #ptitre { font-size: 19px; line-height: 1.3; margin: 0; font-weight: 600;
+    font-family: Georgia, "Times New Roman", serif; }
+  #pmeta { display: flex; gap: 8px; align-items: center; margin-top: 8px;
+    color: var(--brume); font-size: 12px; flex-wrap: wrap; }
+  .badge { padding: 2px 9px; border-radius: 999px; font-size: 11.5px;
+    border: 1px solid var(--fil); color: var(--ecume); }
+  .badge.idee { border-color: var(--idee); color: var(--idee); }
+  .badge.note { border-color: var(--note); color: var(--note); }
+  .badge.source { border-color: var(--source); color: var(--source); }
+  .badge.capture { border-color: var(--capture); color: var(--capture); }
+  .badge.projet, .badge.casquette { border-color: var(--projet); color: var(--projet); }
+  #pactions { display: flex; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--fil); }
+  #pcorps { padding: 14px 18px 24px; overflow-y: auto; flex: 1; line-height: 1.6; }
+  #pcorps::-webkit-scrollbar { width: 9px; }
+  #pcorps::-webkit-scrollbar-thumb { background: var(--fil); border-radius: 5px; }
+
+  /* rendu markdown */
+  .md { font-size: 14.5px; }
+  .md h1, .md h2, .md h3 { color: var(--or); font-weight: 600;
+    font-family: Georgia, serif; margin: 20px 0 8px; }
+  .md h1 { font-size: 19px; } .md h2 { font-size: 16.5px; } .md h3 { font-size: 15px; }
+  .md p, .md ul, .md ol { margin: 8px 0; }
+  .md code { background: var(--plage); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .md pre { background: var(--plage); padding: 10px; border-radius: 8px; overflow-x: auto; }
+  .md blockquote { border-left: 3px solid var(--sable); margin: 8px 0; padding: 2px 14px;
+    color: var(--brume); }
+  .lin { color: var(--note); cursor: pointer; text-decoration: underline dotted;
+    text-underline-offset: 3px; }
+  .lin:hover { color: var(--ecume); }
+  mark { background: rgba(255,213,79,.35); color: inherit; border-radius: 2px; }
+
+  /* sections de fiche */
+  .sect { margin-top: 18px; }
+  .sect > .titre-sect { font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--brume); margin-bottom: 7px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { padding: 4px 11px; border-radius: 999px; background: var(--plage);
+    font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+  .chip:hover { border-color: var(--brume); }
+  .chip.dom { cursor: default; color: var(--brume); }
+  .chip.sug { border-style: dashed; border-color: var(--sable); color: var(--sable);
+    display: inline-flex; gap: 6px; align-items: center; }
+  .chip .vu { border: none; background: none; color: var(--ecume); cursor: pointer;
+    font-size: 13px; padding: 0 2px; }
+  .chip .vu:hover { color: var(--or); }
+  .chip .vx { border: none; background: none; color: var(--brume); cursor: pointer;
+    font-size: 13px; padding: 0 2px; }
+  .chip .vx:hover { color: var(--corail); }
+  .doc { display: flex; flex-direction: column; gap: 5px; }
+  .doc a { color: var(--note); text-decoration: none; font-size: 13.5px; }
+  .doc a:hover { text-decoration: underline; }
+  .doc .livre { color: var(--brume); font-size: 13px; }
+  .vide { color: var(--lune); font-size: 13px; font-style: italic; }
+
+  /* édition */
+  #form-ed { display: flex; flex-direction: column; gap: 10px; }
+  #form-ed label { font-size: 12px; color: var(--brume); }
+  #form-ed input[type=text] { padding: 8px 11px; }
+  #form-ed textarea { min-height: 240px; padding: 10px 12px; font-size: 13.5px;
+    font-family: Consolas, monospace; line-height: 1.55; resize: vertical; }
+  .boutons { display: flex; gap: 8px; align-items: center; }
+  #msg { font-size: 12.5px; color: var(--brume); margin-left: auto; }
+  .msg-err { color: var(--corail) !important; }
+
+  /* ---------- modal création ---------- */
+  #voile { position: fixed; inset: 0; background: rgba(6,13,22,.6); z-index: 20;
+    display: none; align-items: center; justify-content: center; }
+  #voile.on { display: flex; }
+  #modal { width: 560px; max-height: 86vh; overflow-y: auto; background: var(--creux);
+    border: 1px solid var(--fil); border-radius: 14px; padding: 22px 24px;
+    box-shadow: 0 12px 50px rgba(0,0,0,.5); }
+  #modal h2 { margin: 0 0 14px; font-size: 17px; font-family: Georgia, serif; }
+  #modal .champ { margin-bottom: 12px; }
+  #modal label { display: block; font-size: 12px; color: var(--brume); margin-bottom: 5px; }
+  #modal input[type=text], #modal textarea { width: 100%; padding: 9px 12px; }
+  #modal textarea { min-height: 170px; font-family: Consolas, monospace;
+    font-size: 13.5px; line-height: 1.55; resize: vertical; }
+  #doublons-liste { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .doub { display: flex; align-items: center; gap: 10px; padding: 7px 11px;
+    background: var(--plage); border-radius: 8px; font-size: 13.5px; }
+  .doub .t { flex: 1; cursor: pointer; }
+  .doub .t:hover { color: var(--or); }
+  .doub .s { color: var(--brume); font-size: 11.5px; }
+
+  /* toasts */
+  #toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    z-index: 30; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { padding: 9px 18px; border-radius: 999px; background: var(--plage);
+    border: 1px solid var(--fil); font-size: 13.5px; color: var(--ecume);
+    animation: fadein .2s ease; box-shadow: 0 6px 22px rgba(0,0,0,.35); }
+  .toast.err { border-color: var(--corail); color: var(--corail); }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
+</style>
+</head>
 <body>
+
 <div id="bar">
-  <label for="casq">Casquette</label>
+  <span class="logo">Archipel<span>.</span></span>
+  <label for="casq">casquette</label>
   <select id="casq"></select>
-  <input id="q" type="search" placeholder="mot-clé : kigumi, sarking, offset…" autocomplete="off">
+  <input id="q" type="search" placeholder="chercher — fiches, pages pdf… (Entrée)" autocomplete="off">
+  <button class="btn" id="b-relier">Relier</button>
+  <button class="btn primaire" id="b-creer">＋ Fiche</button>
   <span id="stat"></span>
 </div>
+
 <div id="net"></div>
+<div id="mode">Clique la fiche de départ, puis la fiche d'arrivée — <b>Échap</b> pour annuler</div>
 
 <aside id="panel">
-  <header><h2 id="ptitre"></h2><button id="fermer" title="fermer">×</button></header>
-  <div class="corps" id="pcorps"></div>
+  <header>
+    <h2 id="ptitre"></h2>
+    <div id="pmeta"></div>
+  </header>
+  <div id="pactions"></div>
+  <div id="pcorps"></div>
 </aside>
 
+<div id="voile">
+  <div id="modal">
+    <h2>Nouvelle fiche</h2>
+    <div class="champ"><label>Titre — le claim, une affirmation défendable</label>
+      <input type="text" id="n-titre" placeholder="ex. : Le gabarit est un G-code imprimé à l'échelle 1"></div>
+    <div id="doublons-liste"></div>
+    <div class="champ" style="display:flex; gap:10px">
+      <div style="flex:1"><label>Type</label>
+        <select id="n-type" style="width:100%; color:var(--ecume)">
+          <option value="note">note — fragment, coin de table</option>
+          <option value="idee">idee — affirmation</option>
+          <option value="source">source — fiche de lecture</option>
+          <option value="capture">capture</option>
+        </select></div>
+      <div style="flex:2"><label>Domaines (séparés par des virgules)</label>
+        <input type="text" id="n-dom" placeholder="ex. : géométrie, bois"></div>
+    </div>
+    <div class="champ"><label>Corps (markdown)</label>
+      <textarea id="n-corps" placeholder="le contenu — naître pauvre est de droit, relier est la vie"></textarea></div>
+    <div class="boutons">
+      <button class="btn primaire" id="n-ok">Créer</button>
+      <button class="btn" id="n-annuler">Annuler</button>
+      <span id="n-msg"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
 <script>
-const DATA = __DATA__;
-const API = "/api";
-const SERVEUR = location.protocol.startsWith("http");
+"use strict";
+const API = "";
 
-/* ---------- carte ---------- */
-const nodes = new vis.DataSet(DATA.nodes);
-const edges = new vis.DataSet(DATA.edges);
-const net = new vis.Network(document.getElementById("net"), {nodes, edges}, {
-  physics: false,
-  interaction: { hover: true, navigationButtons: true, keyboard: true },
-  nodes: { font: { face: "Segoe UI" } },
-});
-net.fit({ animation: false });
+/* ------------------------------------------------- état */
+let DATA = null;            // {nodes, edges, etats, options, default}
+let net = null, nodes = null, edges = null;
+let eclairage = null;       // état de casquette courant
+let modeRelier = null;      // null | titre de la fiche de départ
+let ficheCourante = null;
 
-const sel = document.getElementById("casq");
-for (const [val, label] of DATA.options) {
-  const o = document.createElement("option"); o.value = val; o.textContent = label; sel.appendChild(o);
+/* ------------------------------------------------- utilitaires */
+const $ = id => document.getElementById(id);
+function echapper(s) { return String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function toast(texte, err = false) {
+  const t = document.createElement("div");
+  t.className = "toast" + (err ? " err" : "");
+  t.textContent = texte;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 3200);
 }
-sel.value = DATA.default;
-
-let eclairage = DATA.etats[sel.value];
-function appliquer(nom) {
-  eclairage = DATA.etats[nom];
-  const nNodes = DATA.nodes.map(n => {
-    const on = eclairage[n.id.slice(5)];
-    return { id: n.id,
-      size: on ? n._size : n._size_off,
-      color: { background: on ? n._fond : "#2b3a4b", border: n._bord },
-      font: { color: on ? "#dce8f5" : "#7d8fa3", size: on ? 28 : 19 } };
-  });
-  const nEdges = DATA.edges.map(e => {
-    const u = eclairage[e._u], v = eclairage[e._v];
-    if (e._kind === "couvee") {
-      const on = u || v;
-      return { id: e.id, color: { color: on ? "#e8a13c" : "#2b3a4b", opacity: on ? 0.9 : 0.25 }, width: on ? 2.5 : 0.8 };
-    }
-    const on = u && v;
-    return { id: e.id, color: { color: "#8fa3b8", opacity: on ? 0.9 : 0.25 }, width: 0.9, hidden: !on };
-  });
-  nodes.update(nNodes); edges.update(nEdges);
-  const nLit = Object.values(eclairage).filter(Boolean).length;
-  document.getElementById("stat").textContent = `${nLit} idées éclairées / ${Object.keys(eclairage).length}`;
+async function api(chemin, opts) {
+  const r = await fetch(API + chemin, opts);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erreur || r.statusText);
+  return d;
 }
-sel.addEventListener("change", () => appliquer(sel.value));
-appliquer(sel.value);
-
-/* ---------- panneau ---------- */
-const panel = document.getElementById("panel");
-const pcorps = document.getElementById("pcorps");
-const ptitre = document.getElementById("ptitre");
-document.getElementById("fermer").onclick = () => panel.classList.remove("ouvert");
-
-function echapper(s) { return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function surligner(texte, mots) {
   let out = echapper(texte);
   for (const m of mots) {
@@ -134,132 +251,326 @@ function surligner(texte, mots) {
   return out;
 }
 
-let courante = null;
-async function ouvrirIdee(titre, mots = []) {
-  panel.classList.add("ouvert");
-  ptitre.textContent = titre;
-  if (!SERVEUR) {
-    pcorps.innerHTML = `<p class="meta">Édition indisponible : lance <code>python tools/archipel_serve.py</code> puis ouvre http://127.0.0.1:8765/</p>`;
+/* ------------------------------------------------- carte */
+function stylerNoeud(n, on, hit) {
+  if (hit) return { id: n.id, size: n.size + 7,
+    color: { background: "#ffd54f", border: "#ffd54f" },
+    font: { color: "#0d1b2a", size: 30, bold: true } };
+  return { id: n.id,
+    size: on ? n.size : n.size_off,
+    color: { background: on ? n.fond : "#1d2b3b", border: n.fond },
+    font: { color: on ? "#dce8f5" : "#5d7183", size: on ? 26 : 17 } };
+}
+function stylerArete(e, litA, litB) {
+  const points = { id: `${e.from}|${e.to}` };
+  if (e.kind === "suggere")
+    return { ...points, color: { color: "#e8a13c", opacity: 0.75 },
+             width: 1.6, dashes: [4, 6] };
+  const on = litA && litB;
+  return { ...points, color: { color: "#8fa3b8", opacity: on ? 0.55 : 0.08 },
+           width: on ? 1.6 : 0.7, hidden: false };
+}
+function appliquerEclairage() {
+  const nom = $("casq").value;
+  eclairage = DATA.etats[nom] || {};
+  nodes.update(DATA.nodes.map(n => stylerNoeud(n, eclairage[n.id], false)));
+  const parTitre = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
+  edges.update(DATA.edges.map(e => stylerArete(e, eclairage[e.from], eclairage[e.to])));
+  const nLit = DATA.nodes.filter(n => eclairage[n.id]).length;
+  $("stat").textContent = `${nLit} éclairées / ${DATA.nodes.length}`;
+}
+async function chargerGraphe() {
+  DATA = await api("/api/graphe");
+  if (!net) {
+    nodes = new vis.DataSet(DATA.nodes);
+    edges = new vis.DataSet(DATA.edges);
+    net = new vis.Network($("net"), { nodes, edges }, {
+      physics: false,
+      interaction: { hover: true, navigationButtons: true, keyboard: true },
+      nodes: { font: { face: "Segoe UI" },
+               shape: "dot", borderWidth: 1.5 },
+    });
+    net.fit({ animation: false });
+    net.on("click", p => clicCarte(p));
+  } else {
+    nodes.clear(); edges.clear();
+    nodes.add(DATA.nodes); edges.add(DATA.edges);
+    net.fit({ animation: false });
+  }
+  if (!$("casq").options.length) {
+    for (const [val, label] of DATA.options) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = label;
+      $("casq").appendChild(o);
+    }
+  }
+  if (![...$("casq").options].some(o => o.value === DATA.default)) DATA.default = DATA.default;
+  appliquerEclairage();
+}
+
+/* ------------------------------------------------- panneau fiche */
+function wikilinksHtml(texte, mots) {
+  // rend markdown puis transforme [[x]] en lien interne cliquable
+  let html = marked.parse(texte);
+  html = html.replace(/\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/g,
+    (_m, t) => `<span class="lin" data-fiche="${echapper(t)}">${echapper(t)}</span>`);
+  return html;
+}
+async function ouvrirFiche(titre, mots = []) {
+  let f;
+  try { f = await api(`/api/fiche?titre=${encodeURIComponent(titre)}`); }
+  catch (e) { toast("fiche introuvable", true); return; }
+  ficheCourante = f;
+  const enCarte = DATA.nodes.some(n => n.id === titre);
+  $("ptitre").textContent = titre;
+  $("pmeta").innerHTML =
+    `<span class="badge ${f.type}">${f.type}</span>` +
+    `<span>${echapper(f.chemin)}</span>` +
+    (f.source ? `<span class="badge">${echapper(f.source)}</span>` : "");
+  $("pactions").innerHTML = `
+    <button class="btn primaire" id="a-editer">Éditer</button>
+    ${enCarte ? `<button class="btn" id="a-relier">Relier à…</button>` : ""}`;
+  const doms = f.domaines?.length
+    ? f.domaines.map(d => `<span class="chip dom">${echapper(d)}</span>`).join("") : "";
+  const lie = (f.lie || []).map(t => `
+    <span class="chip" data-ouvrir="${echapper(t)}">${echapper(t)}
+      <button class="vx" title="retirer le lien" data-del-lien="${echapper(t)}">×</button></span>`).join("");
+  const sug = (f.suggere || []).map(t => `
+    <span class="chip sug" data-ouvrir="${echapper(t)}">${echapper(t)}
+      <button class="vu" title="valider le lien" data-val-sug="${echapper(t)}">✓</button>
+      <button class="vx" title="supprimer la suggestion" data-del-sug="${echapper(t)}">×</button></span>`).join("");
+  const docs = [];
+  if (f.pdf) docs.push(`<a href="/pdf?p=${encodeURIComponent(f.pdf)}" target="_blank">${echapper(f.pdf)}</a>`);
+  if (f.ouvrage) docs.push(`<span class="livre">${echapper(f.ouvrage)}</span>`);
+  if (f.code) docs.push(`<a href="/code?p=${encodeURIComponent(f.code)}" target="_blank">${echapper(f.code)}</a>`);
+  if (f.incarnation) docs.push(`<span class="livre">${echapper(f.incarnation)}</span>`);
+  $("pcorps").innerHTML = `
+    <div class="sect"><div class="titre-sect">Corps</div>
+      <div class="md" id="md-corps">${wikilinksHtml(f.corps, mots)}</div></div>
+    <div class="sect"><div class="titre-sect">Domaines</div>
+      <div class="chips">${doms || '<span class="vide">aucun</span>'}</div></div>
+    <div class="sect"><div class="titre-sect">Liens</div>
+      <div class="chips">${lie || '<span class="vide">aucun lien confirmé</span>'}</div></div>
+    <div class="sect"><div class="titre-sect">Suggestions de l'agent</div>
+      <div class="chips">${sug || '<span class="vide">aucune suggestion</span>'}</div></div>
+    <div class="sect"><div class="titre-sect">Documents & code</div>
+      <div class="doc">${docs.join("") || '<span class="vide">rien d&rsquo;ancré</span>'}</div></div>`;
+  $("panel").classList.add("ouvert");
+  // interactions internes
+  $("pcorps").querySelectorAll(".lin").forEach(el =>
+    el.onclick = () => ouvrirFiche(el.dataset.fiche));
+  $("pcorps").querySelectorAll("[data-ouvrir]").forEach(el =>
+    el.onclick = e => { if (e.target === el) ouvrirFiche(el.dataset.ouvrir); });
+  $("a-editer").onclick = () => formulaireEdition(f);
+  const bRelier = $("a-relier");
+  if (bRelier) bRelier.onclick = () => demarrerRelier(titre);
+  $("pcorps").querySelectorAll("[data-del-lien]").forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    await api(`/api/lien?a=${encodeURIComponent(f.titre)}&b=${encodeURIComponent(b.dataset.delLien)}`, { method: "DELETE" });
+    toast("lien retiré"); await recharger(f.titre);
+  });
+  $("pcorps").querySelectorAll("[data-val-sug]").forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    await api("/api/suggere/valide", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ a: f.titre, b: b.dataset.valSug }) });
+    toast("suggestion validée"); await recharger(f.titre);
+  });
+  $("pcorps").querySelectorAll("[data-del-sug]").forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    await api(`/api/suggere?a=${encodeURIComponent(f.titre)}&b=${encodeURIComponent(b.dataset.delSug)}`, { method: "DELETE" });
+    toast("suggestion supprimée"); await recharger(f.titre);
+  });
+  if (mots.length) surlignerCorps(mots);
+}
+function surlignerCorps(mots) {
+  const walk = n => {
+    if (n.nodeType === 3) {
+      const t = n.textContent;
+      const html = surligner(t, mots);
+      if (html !== echapper(t)) {
+        const s = document.createElement("span"); s.innerHTML = html;
+        n.replaceWith(s);
+      }
+    } else if (n.nodeType === 1 && !["CODE","PRE"].includes(n.tagName)) {
+      [...n.childNodes].forEach(walk);
+    }
+  };
+  walk($("md-corps"));
+}
+async function recharger(titre) {
+  await chargerGraphe();
+  await ouvrirFiche(titre);
+}
+
+/* ------------------------------------------------- édition */
+function formulaireEdition(f) {
+  $("pcorps").innerHTML = `
+    <form id="form-ed">
+      <div><label>Titre (claim)</label>
+        <input type="text" id="e-titre" value="${echapper(f.titre)}"></div>
+      <div><label>Type</label>
+        <select id="e-type" style="color:var(--ecume)">
+          ${["idee","note","source","capture"].map(t =>
+            `<option value="${t}" ${f.type === t ? "selected" : ""}>${t}</option>`).join("")}
+        </select></div>
+      <div><label>Domaines (virgules)</label>
+        <input type="text" id="e-dom" value="${echapper((f.domaines || []).join(", "))}"></div>
+      <div><label>Corps (markdown)</label>
+        <textarea id="e-corps">${echapper(f.corps)}</textarea></div>
+      <div class="boutons">
+        <button class="btn primaire" type="submit">Enregistrer</button>
+        <button class="btn" type="button" id="e-annuler">Annuler</button>
+        <span id="msg"></span>
+      </div>
+    </form>`;
+  $("e-annuler").onclick = () => ouvrirFiche(f.titre);
+  $("form-ed").onsubmit = async ev => {
+    ev.preventDefault();
+    const titre = f.titre, nouveau = $("e-titre").value.trim();
+    const corps = $("e-corps").value;
+    const domaines = $("e-dom").value.split(",").map(s => s.trim()).filter(Boolean);
+    const type = $("e-type").value;
+    $("msg").textContent = "enregistrement…"; $("msg").className = "";
+    try {
+      const res = await api("/api/fiche", { method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titre, corps, domaines, type,
+          nouveau_titre: nouveau !== titre ? nouveau : null }) });
+      toast("fiche enregistrée");
+      await recharger(res.titre);
+    } catch (e) {
+      $("msg").textContent = e.message; $("msg").className = "msg-err";
+    }
+  };
+}
+
+/* ------------------------------------------------- relier à la souris */
+function demarrerRelier(depart) {
+  modeRelier = depart;   // titre, ou "__libre__" si pas encore de fiche ouverte
+  $("mode").classList.add("on");
+  toast(depart === "__libre__"
+    ? "clique la fiche de départ"
+    : `départ : ${depart} — clique l'arrivée`);
+}
+async function clicCarte(p) {
+  if (!p.nodes.length) { if (modeRelier) annulerRelier(); return; }
+  const titre = p.nodes[0];
+  if (modeRelier === "__libre__") {
+    modeRelier = titre;
+    toast(`départ : ${titre} — clique l'arrivée`);
     return;
   }
-  const r = await fetch(`${API}/idee?titre=${encodeURIComponent(titre)}`);
-  if (!r.ok) { pcorps.innerHTML = `<p class="meta">Idée introuvable.</p>`; return; }
-  courante = await r.json();
-  afficherLecture(mots);
-}
-
-function afficherLecture(mots = []) {
-  pcorps.innerHTML = `
-    <div class="meta">${echapper(courante.chemin)}</div>
-    <div class="lecture" id="rendu"></div>
-    <div class="boutons">
-      <button class="primaire" id="editer">Éditer</button>
-      <span id="msg"></span>
-    </div>`;
-  const corps = courante.corps;
-  document.getElementById("rendu").innerHTML = marked.parse(corps);
-  if (mots.length) {
-    // surlignage dans le rendu : sur le texte brut déjà parsé, après parse
-    const rendu = document.getElementById("rendu");
-    const walk = n => {
-      if (n.nodeType === 3) {
-        const t = n.textContent;
-        let html = surligner(t, mots);
-        if (html !== echapper(t)) {
-          const span = document.createElement("span"); span.innerHTML = html;
-          n.replaceWith(span);
-        }
-      } else if (n.nodeType === 1 && !["CODE","PRE"].includes(n.tagName)) {
-        [...n.childNodes].forEach(walk);
-      }
-    };
-    walk(rendu);
+  if (modeRelier) {
+    if (titre === modeRelier) { annulerRelier(); return; }
+    try {
+      await api("/api/lien", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ a: modeRelier, b: titre }) });
+      toast(`relié : ${modeRelier} ↔ ${titre}`);
+      modeRelier = null; $("mode").classList.remove("on");
+      await recharger(titre);
+    } catch (e) { toast(e.message, true); annulerRelier(); }
+    return;
   }
-  const b = document.getElementById("editer");
-  if (b) b.onclick = afficherEdition;
+  await ouvrirFiche(titre);
 }
+function annulerRelier() { modeRelier = null; $("mode").classList.remove("on"); }
+document.addEventListener("keydown", e => { if (e.key === "Escape") {
+  annulerRelier(); fermerModal(); $("panel").classList.remove("ouvert"); } });
 
-function afficherEdition() {
-  pcorps.innerHTML = `
-    <div class="meta">Titre = claim (une affirmation). Le frontmatter reste intact.</div>
-    <input type="text" id="ititre" value="${echapper(courante.titre)}"
-           style="width:100%;margin-bottom:10px;background:#0a1521;color:var(--txt);border:1px solid #2b3a4b;padding:7px;border-radius:4px;font-family:inherit;font-size:14px">
-    <textarea id="tcorps">${echapper(courante.corps)}</textarea>
-    <div class="boutons">
-      <button class="primaire" id="enregistrer">Enregistrer</button>
-      <button id="annuler">Annuler</button>
-      <span id="msg"></span>
-    </div>`;
-  document.getElementById("annuler").onclick = () => afficherLecture();
-  document.getElementById("enregistrer").onclick = enregistrer;
+/* ------------------------------------------------- création + anti-doublons */
+function fermerModal() { $("voile").classList.remove("on"); }
+async function verifierDoublons() {
+  const q = $("n-titre").value.trim();
+  if (q.length < 4) { $("doublons-liste").innerHTML = ""; return; }
+  const { candidats } = await api(`/api/doublons?q=${encodeURIComponent(q)}`);
+  $("doublons-liste").innerHTML = candidats.length
+    ? `<div class="titre-sect" style="font-size:11.5px;color:var(--brume)">Fiches proches — relier plutôt qu'ajouter :</div>` +
+      candidats.map(c => `
+      <div class="doub"><span class="badge ${c.type}">${c.type}</span>
+        <span class="t" data-ouvrir-doub="${echapper(c.titre)}">${echapper(c.titre)}</span>
+        <span class="s">${c.mots.map(echapper).join(", ")}</span>
+        <button class="btn mini" data-rel-doub="${echapper(c.titre)}">relier</button></div>`).join("")
+    : "";
+  $("doublons-liste").querySelectorAll("[data-rel-doub]").forEach(b => b.onclick = async () => {
+    try {
+      await api("/api/lien", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ a: ficheCourante?.titre || b.dataset.relDoub, b: b.dataset.relDoub }) });
+      toast("relié à la fiche proche");
+      fermerModal();
+    } catch (e) { toast(e.message, true); }
+  });
+  $("doublons-liste").querySelectorAll("[data-ouvrir-doub]").forEach(el =>
+    el.onclick = () => ouvrirFiche(el.dataset.ouvrirDoub));
 }
+$("n-titre").addEventListener("input", () => verifierDoublons());
+$("b-creer").onclick = () => {
+  $("n-titre").value = ""; $("n-corps").value = ""; $("n-dom").value = "";
+  $("n-type").value = "note"; $("doublons-liste").innerHTML = ""; $("n-msg").textContent = "";
+  $("voile").classList.add("on"); $("n-titre").focus();
+};
+$("n-annuler").onclick = fermerModal;
+$("voile").onclick = e => { if (e.target === $("voile")) fermerModal(); };
+$("n-ok").onclick = async () => {
+  try {
+    const res = await api("/api/fiche", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titre: $("n-titre").value, type: $("n-type").value,
+        corps: $("n-corps").value,
+        domaines: $("n-dom").value.split(",").map(s => s.trim()).filter(Boolean) }) });
+    toast("fiche créée"); fermerModal();
+    await chargerGraphe(); await ouvrirFiche(res.titre);
+  } catch (e) { $("n-msg").textContent = e.message; $("n-msg").className = "msg-err"; }
+};
+$("b-relier").onclick = () => {
+  demarrerRelier(ficheCourante ? ficheCourante.titre : "__libre__");
+};
 
-async function enregistrer() {
-  const msg = document.getElementById("msg");
-  const titre = courante.titre;
-  const nouveau = document.getElementById("ititre").value.trim();
-  const corps = document.getElementById("tcorps").value;
-  msg.textContent = "enregistrement…"; msg.className = "";
-  const r = await fetch(`${API}/idee`, { method: "PUT", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ titre, corps, nouveau_titre: nouveau !== titre ? nouveau : null }) });
-  const data = await r.json();
-  if (!r.ok) { msg.textContent = data.erreur || "échec"; msg.className = "msg-err"; return; }
-  courante = data;
-  msg.textContent = "enregistré — recharge la page pour rafraîchir la carte";
-}
-
-/* ---------- recherche ---------- */
-const q = document.getElementById("q");
-let t0 = null;
-q.addEventListener("input", () => { clearTimeout(t0); t0 = setTimeout(chercher, 250); });
-
-async function chercher() {
-  const terme = q.value.trim();
+/* ------------------------------------------------- recherche */
+let timer = null;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(rechercher, 260); });
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") rechercher(); });
+async function rechercher() {
+  const terme = $("q").value.trim();
+  if (!terme) { appliquerEclairage(); return; }
   const mots = terme.split(/\s+/).filter(Boolean);
-  // surbrillance des idées sur la carte
-  if (!mots.length) { appliquer(sel.value); panel.classList.remove("ouvert"); return; }
-  if (!SERVEUR) { pcorps.innerHTML = `<p class="meta">Recherche indisponible hors serveur.</p>`; panel.classList.add("ouvert"); return; }
-  const r = await fetch(`${API}/cherche?q=${encodeURIComponent(terme)}`);
-  const d = await r.json();
-  const idees = new Set(d.idees.map(i => i.titre));
-  const nNodes = DATA.nodes.map(n => {
-    const hit = idees.has(n.id.slice(5));
-    return { id: n.id, color: { background: hit ? "#ffd54f" : (eclairage[n.id.slice(5)] ? n._fond : "#1d2b3b"),
-                                border: hit ? "#ffd54f" : n._bord },
-             size: hit ? n._size + 6 : (eclairage[n.id.slice(5)] ? n._size : n._size_off) };
-  });
-  nodes.update(nNodes);
-  if (idees.size) net.fit({ nodes: DATA.nodes.filter(n => idees.has(n.id.slice(5))).map(n => n.id), animation: true });
-
-  panel.classList.add("ouvert");
-  ptitre.textContent = `« ${terme} »`;
-  const sec = (titre, items) => items.length ? `<div class="section-titre">${titre}</div>` + items.join("") : "";
-  const htmlIdees = d.idees.map(i => `
-    <div class="res" data-idee="${echapper(i.titre)}">
-      <div class="t">${surligner(i.titre, mots)}</div>
-      <div class="e">${surligner(i.extrait, mots)}</div></div>`);
-  const htmlPdf = d.pdf.map(p => `
-    <div class="res" data-pdf="${echapper(p.fichier)}" data-page="${p.pages[0]}" data-source="${p.source}">
-      <div class="t">${echapper(p.titre)}</div>
-      <div class="p">${p.source === "biblio" ? "biblio" : "E:/pdf_library"} · pages ${p.pages.slice(0, 8).join(", ")}${p.pages.length > 8 ? " …" : ""}</div>
-      <div class="e">${surligner(p.extrait.replace(/[«»]/g, ""), mots)}</div></div>`);
-  pcorps.innerHTML = `<div id="resultats">
-    ${sec(`Idées (${d.idees.length})`, htmlIdees)}
-    ${sec(`Documents (${d.pdf.length})`, htmlPdf)}
-    ${!d.idees.length && !d.pdf.length ? '<p class="meta">Aucun résultat.</p>' : ""}
-    </div>`;
-  pcorps.querySelectorAll("[data-idee]").forEach(el => el.onclick = () => ouvrirIdee(el.dataset.idee, mots));
-  pcorps.querySelectorAll("[data-pdf]").forEach(el => el.onclick = () => {
-    window.open(`/pdf?p=${encodeURIComponent(el.dataset.pdf)}#page=${el.dataset.page}`, "_blank");
-  });
+  const d = await api(`/api/cherche?q=${encodeURIComponent(terme)}`);
+  const hit = new Set(d.fiches.map(f => f.titre));
+  nodes.update(DATA.nodes.map(n => stylerNoeud(n, eclairage[n.id], hit.has(n.id))));
+  if (hit.size) net.fit({ nodes: DATA.nodes.filter(n => hit.has(n.id)).map(n => n.id), animation: true });
+  $("panel").classList.add("ouvert");
+  ficheCourante = null;
+  $("ptitre").textContent = `« ${terme} »`;
+  $("pmeta").innerHTML = `<span class="badge">${d.fiches.length} fiche(s) · ${d.pdf.length} document(s)</span>`;
+  $("pactions").innerHTML = "";
+  const sec = (titre, items) => items.length
+    ? `<div class="titre-sect">${titre}</div><div class="doc">${items.join("")}</div>` : "";
+  const lfiches = d.fiches.map(f => `
+    <span class="chip" data-ouvrir="${echapper(f.titre)}">${surligner(f.titre, mots)}</span>`);
+  const lpdf = d.pdf.map(p => `
+    <div><a href="/pdf?p=${encodeURIComponent(p.fichier)}#page=${p.pages[0]}" target="_blank">
+      ${echapper(p.titre)}</a>
+      <div class="vide" style="font-style:normal;font-size:11.5px">
+        ${p.source === "biblio" ? "biblio" : "E:/pdf_library"} · pages ${p.pages.slice(0, 8).join(", ")}${p.pages.length > 8 ? "…" : ""}</div>
+      <div style="font-size:12.5px;color:var(--brume)">${surligner(p.extrait.replace(/[«»]/g, ""), mots)}</div></div>`);
+  $("pcorps").innerHTML = `
+    ${sec(`Fiches (${d.fiches.length})`, lfiches)}
+    ${sec(`Documents (${d.pdf.length})`, lpdf)}
+    ${!d.fiches.length && !d.pdf.length ? '<p class="vide">aucun résultat</p>' : ""}`;
+  $("pcorps").querySelectorAll("[data-ouvrir]").forEach(el =>
+    el.onclick = () => ouvrirFiche(el.dataset.ouvrir, mots));
 }
 
-/* clic sur une idée de la carte : ouvre le panneau */
-net.on("click", p => {
-  if (p.nodes.length) {
-    const id = p.nodes[0];
-    if (id.startsWith("idee:")) ouvrirIdee(id.slice(5));
-  }
+/* ------------------------------------------------- départ */
+$("casq").addEventListener("change", appliquerEclairage);
+chargerGraphe().catch(e => {
+  document.body.innerHTML = `<div style="padding:60px;font-size:15px;color:#dce8f5">
+    L'Archipel a besoin de son serveur :<br><br>
+    <code style="background:#16293f;padding:4px 10px;border-radius:6px">python tools/archipel_serve.py</code><br><br>
+    puis ouvre <b>http://127.0.0.1:8765/</b><br>
+    <span style="color:#8fa3b8;font-size:13px">(${echapper(e.message)})</span></div>`;
 });
 </script>
-</body></html>
+</body>
+</html>

@@ -4,7 +4,7 @@ author: user
 domaines: [paramétrique, bois]
 incarnation: rincewind/modelers/maison.py + rincewind/document/timberframes.py (temps 2)
 travaux: 2026-09-27
-suggere: ["[[L'ossature à joints générés (kigumi plate-forme)]]"]
+lie: ["[[L'ossature à joints générés (kigumi plate-forme)]]", "[[Gabarit du garde-corps du chantier E]]"]
 ---
 L'ossature plate-forme est déjà une grammaire répétitive (montants, lisses, plancher d'étage). Kiwari montre qu'un module unique précalcule chaque pièce par règle de proportion.
 
