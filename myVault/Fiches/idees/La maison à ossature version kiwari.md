@@ -1,11 +1,10 @@
 ---
-author: agent
+type: idee
+author: user
 domaines: [paramétrique, bois]
-croise: ["[[Kiwari précalcule chaque pièce depuis un module]]", "[[La plate-forme est une grammaire]]"]
-couvée: 2026-09-27
-approfondi: 2026-09-27
 incarnation: rincewind/modelers/maison.py + rincewind/document/timberframes.py (temps 2)
-enfants: ["[[Le module comme contrat, la géométrie comme dérivation]]", "[[L'entraxe existe déjà, le module non]]"]
+travaux: 2026-09-27
+suggere: ["[[L'ossature à joints générés (kigumi plate-forme)]]"]
 ---
 L'ossature plate-forme est déjà une grammaire répétitive (montants, lisses, plancher d'étage). Kiwari montre qu'un module unique précalcule chaque pièce par règle de proportion.
 

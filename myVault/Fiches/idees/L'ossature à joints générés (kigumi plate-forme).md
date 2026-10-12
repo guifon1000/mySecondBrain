@@ -1,14 +1,10 @@
 ---
-author: agent
+type: idee
+author: user
 domaines: [assemblages, paramétrique, durabilité]
-croise: ["[[Un joint d'angle se génère par calcul]]",
-         "[[Le joint sans métal est réversible]]",
-         "[[La plate-forme est une grammaire]]"]
-couvée: 2026-09-27
-approfondi: 2026-09-27
 incarnation: renardiere temps 2 (opération "ossature" sur le pivot timberframes) + rincewind/geometry/TimberFrame.py (cut_by_plane)
-enfants: ["[[Un joint est une recette de plans de coupe]]", "[[Le connecteur disparaît du devis]]"]
-ressort: "[[L'offset du contour est la trajectoire CNC]] (couvée archivée, réalisée par cette idée)"
+travaux: 2026-09-27
+suggere: ["[[La maison à ossature version kiwari]]"]
 ---
 L'ossature plate-forme se cloue et se visse à des plaques métalliques : solide, mais irréversible, et pont thermique à chaque connexion. Le kigumi montre qu'un catalogue de joints géométriques suffit à tenir une structure entière.
 

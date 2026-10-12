@@ -81,16 +81,38 @@ jamais les fiches de l'humain.
   deux boutons (valider / supprimer). Un seul fichier, deux états de lien.
 - L'agent ne crée jamais de lien confirmé de lui-même.
 
-## Questions ouvertes (en discussion)
+## Structure (décidée)
 
-1. Les 2 satellites (kigumi, kiwari) : conservées comme fiches `pensee`
-   (proposition — elles portent des chemins d'incarnation concrets).
-2. Les 5 idées promues historiques : renommées `author: user` comme tout
-   le monde, ou leur champ reste-t-il tel quel ?
-3. Vocabulaire des types : `pensee / note / source / capture` — suffisant ?
-4. Critère de réussite : comment saura-t-on que l'environnement créatif
-   « marche » ? (proposition : une note reliée et retrouvée en <2 min ;
-   une consultation résolue sans ouvrir de PDF ; une pensée incarnée)
+```
+myVault/
+  Fiches/
+    00 — Convention.md     la doctrine, à côté des fiches
+    idees/                 les affirmations (titre = claim)
+    notes/                 les fragments de coin de table
+    sources/               les fiches de lecture (étoffables, scindables)
+    captures/              ce que l'app déposera
+  Casquettes/  Projets/  Notes/  biblio/  _sources/  Inbox/
+```
+
+Les 2 satellites re-triées vivent dans `Fiches/idees/` avec leurs chemins
+d'incarnation conservés. Les fiches `source` de `_sources/` migreront
+vers `Fiches/sources/` lors de la refonte de l'app.
+
+## La première fiche de lecture (fait, 2026-10-11)
+
+`Fiches/sources/Ali et al. 2017 — Optimal multi-block mesh generation
+for CFD.md` — rédigée par l'agent sur demande explicite, née `author:
+user`, structurée pour être étoffée et scindée (méthodes, résultats,
+leçons pour Hex, pages de référence, questions ouvertes).
+
+## Travail restant
+
+- Migrer les fiches de `_sources/` vers `Fiches/sources/` (format v3).
+- Réécrire l'app : capture → fiches dans le vault, DB = index dérivé.
+- UI de l'Archipel : relier à la souris, valider/supprimer les liens
+  suggérés, créer des fiches `note`, afficher les liens pdf/code.
+- OCR des scans muets (325 sur E:, les restants du vault).
+
 ## Critère de réussite (proposition)
 
 Dans un mois d'usage réel : au moins une question de consultation résolue

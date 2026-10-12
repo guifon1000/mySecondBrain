@@ -37,7 +37,8 @@ from matplotlib.lines import Line2D
 
 ROOT = Path(__file__).resolve().parent.parent
 VAULT = ROOT / "myVault"
-IDEES = VAULT / "Idees"
+IDEES = VAULT / "Fiches"
+NOTES = IDEES / "notes"
 CASQ = VAULT / "Casquettes"
 OUT_PNG = VAULT / "biblio" / "img" / "galaxie-idees.png"
 OUT_NOTE = IDEES / "Galaxie.md"
@@ -58,7 +59,7 @@ DIM_TXT = "#4a5a6b"
 LIT_LINK = "#e8a13c"
 NEUTRE = "#8fa3b8"
 LIEN_LIT = "#8fa3b8"
-SCORE_SEUIL = 2  # au moins deux domaines partagés, ou lignée
+SCORE_SEUIL = 1  # remonter à 2 quand la carte regrossit (au-delà de ~15 fiches)
 
 
 def tokens(text: str) -> set[str]:
@@ -161,13 +162,13 @@ def build(active: str | None):
     doms_active = set(casq[active]["doms"]) if active else set()
 
     ideas, crosses = {}, []
-    for kind_dir in ("atomiques", "satellites"):
+    for kind_dir in ("idees", "notes"):
         for p in sorted((IDEES / kind_dir).glob("*.md")):
             doms, croise, source, body = parse_idea(p)
             if not doms:
                 continue
             ideas[p.stem] = {"doms": doms, "croise": croise, "source": source,
-                             "tokens": tokens(body), "satellite": kind_dir == "satellites"}
+                             "tokens": tokens(body), "satellite": False}
             if croise:
                 crosses.append((p.stem, croise))
 

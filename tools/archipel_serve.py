@@ -11,8 +11,8 @@ Routes :
   GET  /pdf?p=...&page=N      sert un PDF (racines en liste blanche uniquement)
 
 Garde-fous :
-  - jamais d'écriture sur une idée `author: guill` (promue, intouchable)
-  - seuls les fichiers sous Idees/ sont écrits
+  - toutes les fiches sont `author: user` : l'utilisateur édite les siennes
+  - seuls les fichiers sous Fiches/ sont écrits
   - PDF : seules les racines autorisées sont servies (pas d'accès au disque)
   - écoute sur 127.0.0.1 uniquement
 """
@@ -28,7 +28,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parent.parent
 VAULT = ROOT / "myVault"
-IDEES = VAULT / "Idees"
+FICHES = VAULT / "Fiches"
 HTML = VAULT / "Archipel.html"
 CORPUS_DB = ROOT / "data" / "corpus-index.db"
 LIB_DB = ROOT / "data" / "pdf-library-index.db"
@@ -39,8 +39,8 @@ PORT = 8765
 # ---------------------------------------------------------------- idées
 
 def trouver_idee(titre: str) -> Path | None:
-    for sous in ("atomiques", "satellites"):
-        p = IDEES / sous / f"{titre}.md"
+    for sous in ("idees", "notes", "sources"):
+        p = FICHES / sous / f"{titre}.md"
         if p.exists():
             return p
     return None
@@ -54,9 +54,8 @@ def lire_idee(titre: str) -> dict:
     m = re.match(r"^---\n(.*?)\n---\n?", texte, re.DOTALL)
     fm = m.group(1) if m else ""
     corps = texte[m.end():] if m else texte
-    promue = re.search(r"^author:\s*guill", fm, re.MULTILINE) is not None
     return {"titre": titre, "frontmatter": fm, "corps": corps.lstrip("\n"),
-            "promue": promue, "chemin": str(p.relative_to(VAULT))}
+            "chemin": str(p.relative_to(VAULT))}
 
 
 def ecrire_idee(titre: str, corps: str, nouveau_titre: str | None) -> dict:
@@ -64,8 +63,6 @@ def ecrire_idee(titre: str, corps: str, nouveau_titre: str | None) -> dict:
     if p is None:
         raise FileNotFoundError(titre)
     texte = p.read_text(encoding="utf-8")
-    if re.search(r"^author:\s*guill", texte, re.MULTILINE):
-        raise PermissionError("idée promue (author: guill) : lecture seule")
     m = re.match(r"^---\n(.*?)\n---\n?", texte, re.DOTALL)
     fm = m.group(0) if m else ""
     nouveau = f"{fm}{corps.strip()}\n"
@@ -100,8 +97,8 @@ def chercher(q: str, n_pdf: int = 30) -> dict:
         return {"idees": [], "pdf": []}
     mots = q.split()
     idees = []
-    for sous in ("atomiques", "satellites"):
-        for p in sorted((IDEES / sous).glob("*.md")):
+    for sous in ("idees", "notes", "sources"):
+        for p in sorted((FICHES / sous).glob("*.md")):
             t = p.read_text(encoding="utf-8")
             if all(re.search(re.escape(w), t, re.IGNORECASE) for w in mots):
                 m = re.search(re.escape(mots[0]), t, re.IGNORECASE)

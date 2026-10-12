@@ -9,12 +9,10 @@ lib/
 # Vault Obsidian — on versionne la PENSÉE structurée, pas les données
 # (les artefacts app et les données personnelles restent hors git)
 myVault/*
-!myVault/Idees/
+!myVault/Fiches/
 !myVault/Casquettes/
 !myVault/Notes/
 !myVault/Projets/
-myVault/Idees/archive/
-myVault/Idees/atomiques/_trash/
 myVault/biblio/
 myVault/_sources/
 myVault/Inbox/

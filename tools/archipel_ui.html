@@ -149,12 +149,11 @@ async function ouvrirIdee(titre, mots = []) {
 }
 
 function afficherLecture(mots = []) {
-  const promue = courante.promue;
   pcorps.innerHTML = `
-    <div class="meta">${promue ? "idée promue — lecture seule" : "idée agent — modifiable"} · ${echapper(courante.chemin)}</div>
+    <div class="meta">${echapper(courante.chemin)}</div>
     <div class="lecture" id="rendu"></div>
     <div class="boutons">
-      <button class="primaire" id="editer" ${promue ? "disabled" : ""}>Éditer</button>
+      <button class="primaire" id="editer">Éditer</button>
       <span id="msg"></span>
     </div>`;
   const corps = courante.corps;

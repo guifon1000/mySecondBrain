@@ -7,7 +7,7 @@ approfondissements et les couvées. Jamais exposé dans l'UI.
 Couvre :
   - myVault/biblio/pdf/*.pdf        -> texte intégral, page par page
   - myVault/_sources/*.md           -> fiches de lecture
-  - myVault/Idees/**/*.md           -> idées (atomiques, satellites)
+  - myVault/Fiches/**/*.md          -> fiches (idees, notes, sources)
   - myVault/Casquettes/*.md         -> stubs de casquettes
   - myVault/Projets/*.md            -> stubs de projets
 
@@ -143,8 +143,9 @@ def main(force: bool = False):
     # 2. fiches, idées, casquettes, projets
     md_targets = (
         ("_sources/*.md", "fiche"),
-        ("Idees/atomiques/*.md", "idee"),
-        ("Idees/satellites/*.md", "idee"),
+        ("Fiches/idees/*.md", "idee"),
+        ("Fiches/notes/*.md", "note"),
+        ("Fiches/sources/*.md", "source"),
         ("Casquettes/*.md", "casquette"),
         ("Projets/*.md", "projet"),
     )
