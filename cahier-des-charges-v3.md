@@ -40,6 +40,9 @@ jamais les fiches de l'humain.
 
 ## Le rôle de l'IA (redéfini)
 
+- **Le vault est en lecture seule pour l'agent** : tout est `author: user`,
+  l'agent ne crée ni ne modifie jamais une fiche. Il lit, cherche,
+  juxtapose, propose.
 - **Consultation** : les trois étages (fiches → FTS5 → PDF direct).
 - **Débridage** : OCR des scans (325 sur E:, 3 dans le vault) pour rendre
   reliables des pages muettes.
@@ -53,10 +56,12 @@ jamais les fiches de l'humain.
 
 ## Ce qui disparaît
 
-- Le mécanisme de génération d'idées (couvées, qu'elles soient rigoureuses
-  ou sauvages).
-- Les 44 atomiques `author: agent` : **archivées** (dossier archive/,
-  retrouvables) plutôt que supprimées — à confirmer.
+- Le mécanisme de génération d'idées (couvées) — et avec lui le rituel de
+  ratification, dont c'était la raison d'être.
+- Les 44 atomiques `author: agent` : **jetées** (décision de l'humain,
+  2026-10-11). Ce qu'on garde, c'est ce qui est approfondi et rattaché au
+  réel — une fiche sans matière ni lien n'est pas une richesse.
+- Le champ `author: agent` : l'agent n'écrit plus de fiches de pensée.
 
 ## Ce qui reste
 
@@ -67,19 +72,25 @@ jamais les fiches de l'humain.
   suivi, l'index de consultation, `pdf_cherche`, l'Archipel (édition,
   recherche, liens PDF) qui devient l'atelier des fiches.
 
+## Liens : les deux mains (décidé)
+
+- **À la souris** : l'humain relie deux fiches depuis la carte ou le
+  panneau ; le lien est confirmé immédiatement.
+- **Suggérés** : l'agent marque des liaisons possibles dans une section
+  `suggere:` du frontmatter — pointillés sur la carte, dans le panneau
+  deux boutons (valider / supprimer). Un seul fichier, deux états de lien.
+- L'agent ne crée jamais de lien confirmé de lui-même.
+
 ## Questions ouvertes (en discussion)
 
-1. Sort des 44 atomiques (archivées ?) et des 2 satellites (conservées ?).
-2. La distinction `author: agent|guill` a-t-elle encore un sens pour les
-   nouvelles fiches — toutes de l'humain désormais ?
+1. Les 2 satellites (kigumi, kiwari) : conservées comme fiches `pensee`
+   (proposition — elles portent des chemins d'incarnation concrets).
+2. Les 5 idées promues historiques : renommées `author: user` comme tout
+   le monde, ou leur champ reste-t-il tel quel ?
 3. Vocabulaire des types : `pensee / note / source / capture` — suffisant ?
-4. L'app : réécrire la capture (screenshots, watcher) pour produire des
-   fiches dans le vault, ou la geler telle quelle en attendant ?
-5. Critère de réussite : comment saura-t-on que l'environnement créatif
-   « marche » ? (proposition : une note de coin de table reliée et
-   retrouvée en moins de deux minutes ; une consultation résolue sans
-   ouvrir de PDF ; une idée promue incarnée dans un projet)
-
+4. Critère de réussite : comment saura-t-on que l'environnement créatif
+   « marche » ? (proposition : une note reliée et retrouvée en <2 min ;
+   une consultation résolue sans ouvrir de PDF ; une pensée incarnée)
 ## Critère de réussite (proposition)
 
 Dans un mois d'usage réel : au moins une question de consultation résolue
