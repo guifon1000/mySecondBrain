@@ -117,30 +117,27 @@ def depots():
     return chemins, scans
 
 
-def casquettes():
-    db = ROOT / "data" / "secondbrain.db"
-    if not db.exists():
-        return {}
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    titres = {r["id"]: r["title"] for r in conn.execute(
-        "SELECT id, title FROM projects WHERE kind='casquette'")}
-    conn.close()
-    casq = {}
-    for p in sorted((VAULT / "Casquettes").glob("*.md")):
+def chantiers():
+    # {titre: {ouvert, projet, lie, path}} — lus dans myVault/Chantiers/
+    # (le chantier remplace la casquette : contexte de travail concret,
+    # un seul ouvert à la fois)
+    out = {}
+    d = VAULT / "Chantiers"
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.md")):
         block = frontmatter(p.read_text(encoding="utf-8"))
-        mid = re.search(r"^id:\s*(\d+)", block, re.MULTILINE)
-        if not mid or int(mid.group(1)) not in titres:
-            continue
-        titre = titres[int(mid.group(1))]
-        casq[titre] = {"doms": domaines_de(block),
-                       "active": re.search(r"^active:\s*true$", block, re.MULTILINE) is not None,
-                       "path": p}
-    return casq
+        out[p.stem] = {
+            "ouvert": re.search(r"^ouvert:\s*true", block, re.MULTILINE) is not None,
+            "projet": champ_simple(block, "projet") or "",
+            "lie": champ(block, "lie") or [],
+            "path": p,
+        }
+    return out
 
 
 def construire():
-    # (fiches, arêtes lie, arêtes suggere, chemins dépôts, casquettes)
+    """(fiches, arêtes lie, arêtes suggere, chemins dépôts, chantiers)"""
     fiches = {}
     for p in sorted(FICHES.rglob("*.md")):
         if p.name.startswith("00 —") or p.name == "Galaxie.md":
@@ -149,8 +146,8 @@ def construire():
         f["chemin"] = str(p.relative_to(VAULT))
         fiches[f["titre"]] = f
 
-    # projets et casquettes : fiches aussi (lisibles, non dessinées)
-    for dossier, type_f in (("Projets", "projet"), ("Casquettes", "casquette")):
+    # projets et chantiers : fiches aussi (lisibles, non dessinées)
+    for dossier, type_f in (("Projets", "projet"), ("Chantiers", "chantier")):
         for p in sorted((VAULT / dossier).glob("*.md")):
             f = lire_fiche(p)
             f["type"] = type_f
@@ -160,7 +157,7 @@ def construire():
             fiches[f["titre"]] = f
 
     chemins_dep, scans = depots()
-    casq = casquettes()
+    chant = chantiers()
     # résolution insensible à la casse (les wikilinks visent parfois Rincewind, parfois rincewind)
     par_casse = {t.casefold(): t for t in fiches}
 
@@ -191,24 +188,24 @@ def construire():
                     n_match += 1
         f["outils"] = best
         f["diametre"] = 140 + 520 * best + 90 * n_match
-    return fiches, ar_edges, su_edges, chemins_dep, casq
+    return fiches, ar_edges, su_edges, chemins_dep, chant
 
 
-def eclairage(casq: dict, fiches: dict) -> dict:
-    # {nom: {titre: éclairée}} + {nom: {titre: score}}
-    etats, scores = {}, {}
-    for nom in list(casq) + [None]:
-        doms = set(casq[nom]["doms"]) if nom else set()
-        etats[nom or "__aucune__"] = {}
-        scores[nom or "__aucune__"] = {}
-        for t, f in fiches.items():
-            s = len(set(f["domaines"]) & doms) if nom else 0
-            if nom and f["type"] == "idee":
-                # bonus : la fiche est liée à un projet de l'écosystème
-                s += 1 if f["lie"] or f["incarnation"] else 0
-            scores[nom or "__aucune__"][t] = s
-            etats[nom or "__aucune__"][t] = bool(s >= SCORE_SEUIL) if nom else True
-    return etats, scores
+def eclairage(chant: dict, fiches: dict) -> dict:
+    # éclairage exact : le chantier ouvert éclaire les fiches qu'il touche
+    # (liens directs), plus celles reliées à son projet. Plus de score.
+    par_casse = {t.casefold(): t for t in fiches}
+    out = {}
+    for nom, c in chant.items():
+        e = set()
+        cibles = list(c["lie"]) + ([c["projet"]] if c["projet"] else [])
+        for cible in cibles:
+            t = par_casse.get(cible.casefold())
+            if t:
+                e.add(t)
+        out[nom] = {"eclairees": e, "ouvert": c["ouvert"]}
+    out["__aucune__"] = {"eclairees": set(fiches), "ouvert": False}
+    return out
 
 
 def positions(fiches, ar_edges, su_edges, largeur=1500, hauteur=950):

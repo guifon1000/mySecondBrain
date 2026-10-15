@@ -4,7 +4,7 @@ author: user
 domaines: [assemblages, géométrie, mécanique, numérique]
 source: SB-0054
 pdf: "bois-101.pdf"
-lie: ["[[Renardiere]]", "[[Rincewind]]"]
+lie: ["[[Renardiere]]", "[[Rincewind]]", "[[L'ossature à joints générés (kigumi plate-forme)]]"]
 ---
 # Kigumi — l'art des assemblages japonais sans métal
 

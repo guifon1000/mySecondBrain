@@ -30,10 +30,10 @@ OUT_NOTE = ROOT / "myVault" / "Fiches" / "Galaxie.md"
 
 
 def main():
-    fiches, ar, su, chemins, casq = graphe.construire()
-    active = next((t for t, c in casq.items() if c["active"]), None)
-    etats, scores = graphe.eclairage(casq, fiches)
-    etat = etats.get(active or "__aucune__", {})
+    fiches, ar, su, chemins, chant = graphe.construire()
+    active = next((t for t, c in chant.items() if c["ouvert"]), None)
+    ecl_par = graphe.eclairage(chant, fiches)
+    etat = ecl_par.get(active or "__aucune__", {}).get("eclairees", set())
 
     # positions : même layout que la page interactive (graphe.py)
     pos = graphe.positions(fiches, ar, su, largeur=9.0, hauteur=5.6)
@@ -56,7 +56,7 @@ def main():
             G.add_edge(a, b)
 
     def ecl(n):
-        return active is None or etat.get(n, False)
+        return active is None or n in etat
 
     # liens : confirmés (trait plein) + suggestions (pointillés)
     for a, b in ar:
@@ -96,7 +96,7 @@ def main():
                 bbox=dict(facecolor=MER, alpha=0.55 if on else 0.3,
                           edgecolor="none", pad=1.2), zorder=4)
 
-    titre = f"Archipel — casquette : {active}" if active else "Archipel — carte neutre"
+    titre = f"Archipel — chantier : {active}" if active else "Archipel — carte neutre"
     n_lit = sum(1 for n in dessines if ecl(n))
     ax.set_title(f"{titre} · {n_lit} éclairées / {len(dessines)} · "
                  f"{len(ar)} liens · {len(su)} suggestion(s)",

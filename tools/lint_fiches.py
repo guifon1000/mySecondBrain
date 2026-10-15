@@ -64,7 +64,7 @@ def pages_pdf(chemin_pdf: Path) -> int:
 
 
 def lint():
-    fiches, ar, su, chemins_dep, casq = graphe.construire()
+    fiches, ar, su, chemins_dep, chant = graphe.construire()
     par_casse = {t.casefold(): t for t in fiches}
     trouver = graphe.FICHES
     rapport = []
@@ -171,10 +171,10 @@ def lint():
     for t, f in fiches.items():
         for d in f["domaines"]:
             usage.setdefault(d, []).append(t)
-    doms_casq = {d for c in casq.values() for d in c["doms"]}
+    doms_chant = {d for c in chant.values() for d in graphe.domaines_de(graphe.frontmatter(c["path"].read_text(encoding="utf-8")))}
     for d, fs in usage.items():
-        if d not in doms_casq and len(fs) == 1:
-            signaler(INFO, fs[0], f"domaine « {d} » isolé (ni casquette, ni autre fiche) — dérive lexicale ?")
+        if d not in doms_chant and len(fs) == 1:
+            signaler(INFO, fs[0], f"domaine « {d} » isolé (ni chantier, ni autre fiche) — dérive lexicale ?")
 
     return rapport, fiches
 

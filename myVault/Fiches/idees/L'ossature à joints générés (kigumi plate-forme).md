@@ -5,6 +5,7 @@ domaines: [assemblages, paramétrique, durabilité]
 incarnation: renardiere temps 2 (opération "ossature" sur le pivot timberframes) + rincewind/geometry/TimberFrame.py (cut_by_plane)
 travaux: 2026-09-27
 suggere: ["[[La maison à ossature version kiwari]]"]
+lie: ["[[SB-0054 — Kigumi assemblages japonais]]"]
 ---
 L'ossature plate-forme se cloue et se visse à des plaques métalliques : solide, mais irréversible, et pont thermique à chaque connexion. Le kigumi montre qu'un catalogue de joints géométriques suffit à tenir une structure entière.
 

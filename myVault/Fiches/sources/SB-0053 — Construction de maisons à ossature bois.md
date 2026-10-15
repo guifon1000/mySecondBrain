@@ -4,7 +4,7 @@ author: user
 domaines: [bois, métier, normes, paramétrique]
 source: SB-0053
 pdf: "[Yves_Benoît,_Thierry_Paradis]_Construction_de_ma(b-ok.xyz).pdf"
-lie: ["[[Rincewind]]", "[[Sapientpearwood]]"]
+lie: ["[[Rincewind]]", "[[Sapientpearwood]]", "[[SB-0057 — Solution Sarking]]"]
 ---
 # Construction de maisons à ossature bois
 

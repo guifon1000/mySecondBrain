@@ -5,7 +5,7 @@
 
 Routes :
   GET    /                       la page (tools/archipel_ui.html)
-  GET    /api/graphe             nœuds, arêtes, positions, états de casquette
+  GET    /api/graphe             nœuds, arêtes, positions, éclairage chantier
   GET    /api/fiche?titre=       une fiche (frontmatter + corps + métadonnées)
   POST   /api/fiche              créer {titre, type, corps, domaines?}
   PUT    /api/fiche              éditer {titre, corps, nouveau_titre?, domaines?, type?}
@@ -15,6 +15,11 @@ Routes :
   POST   /api/suggere/valide     {a, b}           : valider une suggestion → lien
   DELETE /api/suggere            {a, b}           : supprimer une suggestion
   GET    /api/cherche?q=         fiches + pages PDF (biblio et E:)
+  GET    /api/ordonnance         liste ; ?nom= → une ordonnance résolue
+  POST   /api/ordonnance         créer {titre, chantier, question, corps, depot?}
+  PUT    /api/ordonnance         éditer {nom, corps} (état préparée seul)
+  POST   /api/ordonnance/etat    {nom, etat: signee|confiee}
+  GET    /api/codefile?depot=&chemin=  fichier entier (widget code)
   GET    /pdf?p=&page=           sert un PDF (racines en liste blanche)
   GET    /code?p=dépôt/chemin    sert un fichier de code d'un dépôt connu
 
@@ -45,7 +50,7 @@ PDF_RACINES = [VAULT / "biblio" / "pdf", Path("E:/pdf_library")]
 PORT = 8765
 
 DOSSIERS = {"idee": "idees", "note": "notes", "source": "sources",
-            "capture": "captures", "projet": None, "casquette": None}
+            "capture": "captures", "projet": None, "chantier": None}
 
 
 # ------------------------------------------------------------- frontmatter
@@ -85,10 +90,10 @@ GENERES = {"Galaxie"}
 
 
 def fichier_de(titre: str) -> Path | None:
-    """Toute fiche du vault (Fiches, Projets, Casquettes) — sauf les générées."""
+    """Toute fiche du vault (Fiches, Projets, Chantiers) — sauf les générées."""
     if titre in GENERES or titre.startswith("00 —"):
         return None
-    for racine in (FICHES, VAULT / "Projets", VAULT / "Casquettes"):
+    for racine in (FICHES, VAULT / "Projets", VAULT / "Chantiers"):
         for p in racine.rglob(f"{titre}.md"):
             return p
     return None
@@ -157,7 +162,7 @@ def renommer(p: Path, nouveau_titre: str):
     cible = p.with_name(nouveau_titre + ".md")
     p.rename(cible)
     # propagation : corps ([[ancien]]) et champs (lie/suggere) de toutes les fiches
-    for racine in (FICHES, VAULT / "Projets", VAULT / "Casquettes"):
+    for racine in (FICHES, VAULT / "Projets", VAULT / "Chantiers"):
         for f in racine.rglob("*.md"):
             t = f.read_text(encoding="utf-8")
             n = t.replace(f"[[{ancien}]]", f"[[{nouveau_titre}]]")
@@ -222,7 +227,7 @@ def _fts_query(q: str) -> str:
 def chercher(q: str, n_pdf: int = 30) -> dict:
     mots = q.split()
     fiches = []
-    for racine in (FICHES, VAULT / "Projets", VAULT / "Casquettes"):
+    for racine in (FICHES, VAULT / "Projets", VAULT / "Chantiers"):
         for p in sorted(racine.rglob("*.md")):
             if p.stem in GENERES or p.stem.startswith("00 —"):
                 continue
@@ -305,6 +310,210 @@ def code_autorise(chemin: str) -> Path | None:
     return None
 
 
+# ------------------------------------------------------------- ordonnances
+
+# artefacts dérivés : préparées ici (hors vault), confiées au dépôt
+SESSIONS = ROOT / "data" / "sessions"
+ETATS = ("preparee", "signee", "confiee")
+
+
+def parse_blocs(corps: str) -> list[dict]:
+    """Blocs fence typés — lisible à l'œil et par un agent de codage :
+
+        ```pdf
+        doc: Ali et al. 2017
+        page: 14
+
+        la décomposition en blocs hexaèdres…
+        ```
+
+    En-tête = lignes `clé: valeur` jusqu'à la première ligne vide ;
+    le reste est le corps (citation, commentaire, consigne).
+    """
+    blocs, cur, attrs_done = [], None, False
+    for ligne in corps.split("\n"):
+        if cur is None:
+            m = re.match(r"^```(\w+)\s*$", ligne)
+            if m:
+                cur, attrs_done = {"type": m.group(1), "attrs": {}, "corps": []}, False
+            continue
+        if ligne.strip() == "```":
+            cur["corps"] = "\n".join(cur["corps"]).strip()
+            blocs.append(cur)
+            cur = None
+            continue
+        if not attrs_done:
+            m = re.match(r"^([\w-]+):\s*(.*)$", ligne)
+            if m:
+                cur["attrs"][m.group(1)] = m.group(2).strip()
+                continue
+            if not ligne.strip():
+                attrs_done = True
+                continue
+            attrs_done = True  # corps direct, pas d'en-tête
+        cur["corps"].append(ligne)
+    return blocs
+
+
+def _attrs_lignes(attrs: dict) -> str:
+    return "\n".join(f"{k}: {v}" for k, v in attrs.items())
+
+
+def pdf_de_source(titre: str) -> Path | None:
+    """Le PDF attaché à une fiche source (champ pdf:, nom ou [[wikilink]]."""
+    p = fichier_de(titre)
+    if p is None:
+        return None
+    _a, fm, _c = sep_crlf(p.read_text(encoding="utf-8"))
+    brut = graphe.champ_simple(fm, "pdf")
+    if not brut:
+        return None
+    # [[wikilink]] → nom nu ; sinon le nom est pris tel quel (certains
+    # fichiers commencent par un crochet — strip() les dévorait)
+    m = re.match(r"^\[\[(.+)\]\]$", brut.strip())
+    nom = m.group(1) if m else brut.strip()
+    for racine in PDF_RACINES:
+        cand = racine / nom
+        if cand.is_file():
+            return cand
+    for racine in PDF_RACINES:
+        if racine.is_dir():
+            for f in racine.rglob("*.pdf"):
+                if f.name.casefold() == nom.casefold():
+                    return f
+    return None
+
+
+def _plages(brut: str) -> list[tuple[int, int]]:
+    out = []
+    for morceau in re.split(r"[,;\s]+", brut or ""):
+        m = re.match(r"^(\d+)-(\d+)$", morceau)
+        if m:
+            out.append((int(m.group(1)), int(m.group(2))))
+        elif m2 := re.match(r"^(\d+)$", morceau):
+            n = int(m2.group(1))
+            out.append((n, n))
+    return out
+
+
+def _resoudre_bloc(b: dict) -> dict:
+    """Résout un bloc vers sa matière : chemin PDF réel, fichier de code
+    + plages, ou fiche du vault. Ne jette pas : un bloc insoluble reste
+    affichable (ok: false + raison)."""
+    t, a = b["type"], b["attrs"]
+    if t == "pdf":
+        doc = a.get("doc", "")
+        p = pdf_de_source(doc)
+        if p is None:
+            return {**b, "ok": False, "erreur": f"PDF introuvable pour la source « {doc} »"}
+        return {**b, "ok": True, "chemin_pdf": str(p),
+                "page": int(a.get("page", 1) or 1)}
+    if t == "code":
+        depot, chemin = a.get("depot", ""), a.get("chemin", "")
+        p = code_autorise(f"{depot}/{chemin}") if depot and chemin else None
+        if p is None:
+            return {**b, "ok": False, "erreur": f"fichier introuvable : {depot}/{chemin}"}
+        return {**b, "ok": True, "chemin_code": f"{depot}/{chemin}",
+                "plages": _plages(a.get("lignes", ""))}
+    if t == "fiche":
+        try:
+            return {**b, "ok": True, "fiche": lire_fiche(a.get("titre", ""))}
+        except FileNotFoundError:
+            return {**b, "ok": False, "erreur": f"fiche introuvable : {a.get('titre', '')}"}
+    return {**b, "ok": True}  # type inconnu : affiché brut (extensible)
+
+
+def ordonnances() -> list[dict]:
+    SESSIONS.mkdir(exist_ok=True)
+    out = []
+    for p in sorted(SESSIONS.glob("*.md")):
+        _a, fm, _c = sep_crlf(p.read_text(encoding="utf-8"))
+        etat = graphe.champ_simple(fm, "etat") or "preparee"
+        out.append({"nom": p.stem, "etat": etat if etat in ETATS else "preparee",
+                    "chantier": graphe.champ_simple(fm, "chantier") or "",
+                    "depot": graphe.champ_simple(fm, "depot") or "",
+                    "question": graphe.champ_simple(fm, "question") or ""})
+    return out
+
+
+def lire_ordonnance(nom: str) -> dict:
+    p = SESSIONS / f"{nom}.md"
+    if not re.match(r"^[\w ,…—'’()\[\]-]+$", nom) or not p.is_file():
+        raise FileNotFoundError(nom)
+    _a, fm, corps = sep_crlf(p.read_text(encoding="utf-8"))
+    etat = graphe.champ_simple(fm, "etat") or "preparee"
+    return {"nom": p.stem, "etat": etat,
+            "chantier": graphe.champ_simple(fm, "chantier") or "",
+            "depot": graphe.champ_simple(fm, "depot") or "",
+            "question": graphe.champ_simple(fm, "question") or "",
+            "corps": corps.strip(),
+            "blocs": [_resoudre_bloc(b) for b in parse_blocs(corps)]}
+
+
+def creer_ordonnance(titre: str, chantier: str, question: str, corps: str,
+                     depot: str = "") -> dict:
+    titre = titre.strip()
+    if not re.match(r"^[^/\\:*?\"<>|]{3,140}$", titre):
+        raise ValueError("titre invalide (3-140 car., sans /\\:*?\"<>|)")
+    SESSIONS.mkdir(exist_ok=True)
+    p = SESSIONS / f"{date.today():%Y%m%d} — {titre}.md"
+    i = 1
+    while p.exists():
+        i += 1
+        p = SESSIONS / f"{date.today():%Y%m%d} — {titre} ({i}).md"
+    entete = ["type: ordonnance", "author: agent", "etat: preparee",
+              f"created: {date.today().isoformat()}"]
+    if chantier:
+        entete.append(f'chantier: "{chantier}"')
+    if depot:
+        entete.append(f'depot: "{depot}"')
+    if question:
+        entete.append(f'question: "{question}"')
+    p.write_text("---\n" + "\n".join(entete) + "\n---\n" + normalise(corps) + "\n",
+                 encoding="utf-8")
+    return lire_ordonnance(p.stem)
+
+
+def ecrire_ordonnance(nom: str, corps: str, question: str | None = None) -> dict:
+    """Édition : réservée à l'état préparée — la signature fige."""
+    o = lire_ordonnance(nom)
+    if o["etat"] != "preparee":
+        raise ValueError(f"ordonnance {o['etat']} : figée, plus éditable")
+    p = SESSIONS / f"{nom}.md"
+    _a, fm, _c = sep_crlf(p.read_text(encoding="utf-8"))
+    if question is not None:
+        fm = set_champ_simple(fm, "question", question)
+    p.write_text(f"---\n{fm}\n---\n{normalise(corps)}\n", encoding="utf-8")
+    return lire_ordonnance(nom)
+
+
+def etat_ordonnance(nom: str, etat: str) -> dict:
+    o = lire_ordonnance(nom)
+    if etat == "signee":
+        if o["etat"] != "preparee":
+            raise ValueError(f"signature impossible depuis {o['etat']}")
+    elif etat == "confiee":
+        if o["etat"] != "signee":
+            raise ValueError("confier exige une ordonnance signée")
+        depot = o["depot"]
+        chemins, _ = graphe.depots()
+        racine = next((r for t, r in chemins.items()
+                       if t.casefold() == depot.casefold() and r), None)
+        if racine is None:
+            raise ValueError(f"dépôt inconnu : {depot!r}")
+        cible = Path(racine) / "sessions"
+        cible.mkdir(exist_ok=True)
+        (cible / f"{nom}.md").write_text(
+            (SESSIONS / f"{nom}.md").read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        raise ValueError(f"état inconnu : {etat!r}")
+    p = SESSIONS / f"{nom}.md"
+    _a, fm, _c = sep_crlf(p.read_text(encoding="utf-8"))
+    fm = set_champ_simple(fm, "etat", etat)
+    p.write_text(f"---\n{fm}\n---\n{_c}", encoding="utf-8")
+    return lire_ordonnance(nom)
+
+
 # ------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -328,9 +537,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _graphe_data(self):
-        fiches, ar, su, chemins_dep, casq = graphe.construire()
+        fiches, ar, su, chemins_dep, chant = graphe.construire()
         pos = graphe.positions(fiches, ar, su)
-        etats, scores = graphe.eclairage(casq, fiches)
+        ecl = graphe.eclairage(chant, fiches)
         _, climate_color = _climats(fiches)
         nodes = []
         for t, f in fiches.items():
@@ -367,12 +576,15 @@ class Handler(BaseHTTPRequestHandler):
             if (a, b) not in vus and a in ids and b in ids:
                 edges.append({"from": a, "to": b, "kind": "suggere"})
                 vus.add((a, b))
-        casq_noms = list(casq)
+        casq_noms = list(chant)
+        etats = {nom: {t: (t in v["eclairees"])
+                       for t in fiches if fiches[t]["type"] in graphe.TYPES_DESSINES}
+                 for nom, v in ecl.items()}
         return {
             "nodes": nodes, "edges": edges,
-            "etats": etats, "scores": scores,
-            "options": [[n, n] for n in casq_noms] + [["__aucune__", "aucune (carte neutre)"]],
-            "default": next((n for n in casq_noms if casq[n]["active"]), "__aucune__"),
+            "etats": etats,
+            "options": [[n, n] for n in casq_noms] + [["__aucune__", "aucun (carte neutre)"]],
+            "default": next((n for n, v in ecl.items() if v["ouvert"]), "__aucune__"),
             "fiches_hors_carte": [t for t in fiches if fiches[t]["type"] not in graphe.TYPES_DESSINES],
         }
 
@@ -393,6 +605,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"candidats": doublons(q1("q"))})
         elif u.path == "/api/cherche":
             self._json(200, chercher(q1("q")))
+        elif u.path == "/api/ordonnance":
+            if q1("nom"):
+                try:
+                    self._json(200, lire_ordonnance(q1("nom")))
+                except FileNotFoundError:
+                    self._json(404, {"erreur": "ordonnance introuvable"})
+            else:
+                self._json(200, {"ordonnances": ordonnances()})
+        elif u.path == "/api/codefile":
+            p = code_autorise(f"{q1('depot')}/{q1('chemin')}")
+            if p is None:
+                self._json(404, {"erreur": "fichier introuvable"})
+            else:
+                self._json(200, {"texte": p.read_text(encoding="utf-8", errors="replace")})
         elif u.path == "/pdf":
             p = pdf_autorise(q1("p"))
             if p is None:
@@ -423,6 +649,12 @@ class Handler(BaseHTTPRequestHandler):
                 lien_modifier(d["a"], d["b"], "suggere", False)
                 lien_modifier(d["a"], d["b"], "lie", True)
                 self._json(200, {"ok": True})
+            elif u == "/api/ordonnance":
+                self._json(200, creer_ordonnance(d["titre"], d.get("chantier", ""),
+                                                 d.get("question", ""), d.get("corps", ""),
+                                                 d.get("depot", "")))
+            elif u == "/api/ordonnance/etat":
+                self._json(200, etat_ordonnance(d["nom"], d["etat"]))
             else:
                 self.send_error(404)
         except FileNotFoundError as e:
@@ -433,14 +665,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"erreur": str(e)})
 
     def do_PUT(self):
-        if urllib.parse.urlparse(self.path).path != "/api/fiche":
+        path = urllib.parse.urlparse(self.path).path
+        if path not in ("/api/fiche", "/api/ordonnance"):
             self.send_error(404)
             return
         n = int(self.headers.get("Content-Length", "0"))
         try:
             d = json.loads(self.rfile.read(n).decode("utf-8"))
-            res = ecrire_fiche(d["titre"], d.get("corps"),
-                               d.get("nouveau_titre"), d.get("domaines"), d.get("type"))
+            if path == "/api/fiche":
+                res = ecrire_fiche(d["titre"], d.get("corps"),
+                                   d.get("nouveau_titre"), d.get("domaines"), d.get("type"))
+            else:
+                res = ecrire_ordonnance(d["nom"], d.get("corps", ""), d.get("question"))
             self._json(200, res)
         except FileNotFoundError:
             self._json(404, {"erreur": "fiche introuvable"})

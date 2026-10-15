@@ -140,13 +140,13 @@ def main(force: bool = False):
     for pdf in sorted((VAULT / "biblio" / "pdf").glob("*.pdf")):
         n = index_pdf(conn, pdf)
         stats[f"pdf:{pdf.name[:40]}"] = n
-    # 2. fiches, idées, casquettes, projets
+    # 2. fiches, chantiers, projets
     md_targets = (
-        ("_sources/*.md", "fiche"),
         ("Fiches/idees/*.md", "idee"),
         ("Fiches/notes/*.md", "note"),
         ("Fiches/sources/*.md", "source"),
-        ("Casquettes/*.md", "casquette"),
+        ("Fiches/captures/*.md", "capture"),
+        ("Chantiers/*.md", "chantier"),
         ("Projets/*.md", "projet"),
     )
     for pattern, kind in md_targets:

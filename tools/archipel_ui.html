@@ -5,6 +5,7 @@
 <title>Archipel</title>
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+<script src="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
 <style>
   :root {
     --mer: #0d1b2a;        /* fond */
@@ -18,7 +19,7 @@
     --sable: #e8a13c;      /* accent couvée */
     --corail: #ff8a80;     /* erreur */
     --idee: #ffd54f; --note: #7ec8e3; --source: #7fd4a8; --capture: #c39bd3;
-    --projet: #a0aec0; --casquette: #f0b27a;
+    --projet: #a0aec0; --chantier: #f0b27a; --ordonnance: #e8a13c;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden;
@@ -76,7 +77,42 @@
   .badge.note { border-color: var(--note); color: var(--note); }
   .badge.source { border-color: var(--source); color: var(--source); }
   .badge.capture { border-color: var(--capture); color: var(--capture); }
-  .badge.projet, .badge.casquette { border-color: var(--projet); color: var(--projet); }
+  .badge.projet, .badge.chantier { border-color: var(--projet); color: var(--projet); }
+  .badge.ordonnance { border-color: var(--ordonnance); color: var(--ordonnance); }
+  .badge.ord-preparee { border-color: var(--brume); color: var(--brume); }
+  .badge.ord-signee { border-color: var(--or); color: var(--or); }
+  .badge.ord-confiee { border-color: var(--source); color: var(--source); }
+
+  /* ---------- widgets d'ordonnance ---------- */
+  .wcart { border: 1px solid var(--fil); border-radius: 10px;
+    background: var(--creux); padding: 12px 14px; margin: 10px 0; }
+  .wcart .wtype { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--brume); margin-bottom: 6px; }
+  .wcart .wtype b { color: var(--or); font-weight: 600; }
+  .wcart .wcite { font-family: Georgia, serif; font-size: 14.5px; line-height: 1.5;
+    color: var(--ecume); }
+  .wcart .wnote { font-size: 12.5px; color: var(--brume); margin-top: 7px; }
+  .wcart.erree { border-color: var(--corail); }
+  .wcart .wlien { color: var(--note); cursor: pointer; text-decoration: none; }
+  .wcart .wlien:hover { text-decoration: underline; }
+  .wcode { border: 1px solid var(--fil); border-radius: 10px; background: var(--creux);
+    margin: 10px 0; overflow: hidden; }
+  .wcode .whead { padding: 8px 14px; font-size: 12.5px; color: var(--brume);
+    border-bottom: 1px solid var(--fil); display: flex; gap: 10px; align-items: baseline; }
+  .wcode .whead b { color: var(--or); font-weight: 600; }
+  .wcode .wscroll { max-height: 460px; overflow: auto; }
+  .wcode table { border-collapse: collapse; width: 100%; font-family: Consolas, monospace;
+    font-size: 12.5px; line-height: 1.45; }
+  .wcode td.num { width: 1%; min-width: 44px; text-align: right; padding: 0 10px 0 14px;
+    color: #3d5570; user-select: none; vertical-align: top; }
+  .wcode td.ligne { padding: 0 14px 0 6px; white-space: pre; color: var(--ecume); }
+  .wcode tr.dim td.ligne { opacity: 0.18; }
+  .wcode tr.vie td.ligne { opacity: 1; }
+  .wcode tr.vie td.num { color: var(--or); }
+  .wcode tr.vie { background: rgba(255, 213, 79, 0.06); }
+  .wcode .wzoom { padding: 7px 14px; border-top: 1px solid var(--fil);
+    font-size: 12.5px; color: var(--brume); }
+  .wcode .wzoom button { margin-left: 8px; }
   #pactions { display: flex; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--fil); }
   #pcorps { padding: 14px 18px 24px; overflow-y: auto; flex: 1; line-height: 1.6; }
   #pcorps::-webkit-scrollbar { width: 9px; }
@@ -164,9 +200,10 @@
 
 <div id="bar">
   <span class="logo">Archipel<span>.</span></span>
-  <label for="casq">casquette</label>
+  <label for="casq">chantier</label>
   <select id="casq"></select>
   <input id="q" type="search" placeholder="chercher — fiches, pages pdf… (Entrée)" autocomplete="off">
+  <button class="btn" id="b-ord">Ordonnances</button>
   <button class="btn" id="b-relier">Relier</button>
   <button class="btn primaire" id="b-creer">＋ Fiche</button>
   <span id="stat"></span>
@@ -220,7 +257,7 @@ const API = "";
 /* ------------------------------------------------- état */
 let DATA = null;            // {nodes, edges, etats, options, default}
 let net = null, nodes = null, edges = null;
-let eclairage = null;       // état de casquette courant
+let eclairage = null;       // état du chantier courant
 let modeRelier = null;      // null | titre de la fiche de départ
 let ficheCourante = null;
 
@@ -304,7 +341,7 @@ async function chargerGraphe() {
       $("casq").appendChild(o);
     }
   }
-  if (![...$("casq").options].some(o => o.value === DATA.default)) DATA.default = DATA.default;
+  $("casq").value = DATA.default;
   appliquerEclairage();
 }
 
@@ -561,6 +598,180 @@ async function rechercher() {
   $("pcorps").querySelectorAll("[data-ouvrir]").forEach(el =>
     el.onclick = () => ouvrirFiche(el.dataset.ouvrir, mots));
 }
+
+/* ------------------------------------------------- ordonnances */
+const LANGS = { rs: "rust", py: "python", js: "javascript", toml: "ini",
+  md: "markdown", json: "json", txt: null, cs: null };
+
+function wPdf(b) {
+  const cite = b.corps ? `<div class="wcite">« ${echapper(b.corps)} »</div>` : "";
+  const lien = b.ok
+    ? `<a class="wlien" href="/pdf?p=${encodeURIComponent(b.chemin_pdf)}#page=${b.page}" target="_blank">ouvrir la page ${b.page} ↗</a>`
+    : `<span style="color:var(--corail)">${echapper(b.erreur)}</span>`;
+  return `<div class="wcart ${b.ok ? "" : "erree"}">
+    <div class="wtype"><b>pdf</b> · ${echapper(b.attrs.doc || "")}</div>
+    ${cite}<div class="wnote">${lien}</div></div>`;
+}
+
+function wFiche(b) {
+  if (!b.ok) return `<div class="wcart erree"><div class="wtype"><b>fiche</b></div>
+    <div class="wnote">${echapper(b.erreur)}</div></div>`;
+  const f = b.fiche;
+  return `<div class="wcart"><div class="wtype"><b>fiche</b> ·
+      <span class="wlien" data-ouvrir-fiche="${echapper(f.titre)}">${echapper(f.titre)}</span></div>
+    <div class="wcite">${wikilinksHtml((f.corps || "").slice(0, 600), [])}</div></div>`;
+}
+
+function wAutre(b) {
+  const attrs = Object.entries(b.attrs).map(([k, v]) => `${k}: ${echapper(v)}`).join(" · ");
+  return `<div class="wcart"><div class="wtype"><b>${echapper(b.type)}</b> · ${attrs}</div>
+    <div class="wcite">${echapper(b.corps)}</div></div>`;
+}
+
+function idCode(chemin) { return "w-" + chemin.replace(/[^A-Za-z0-9]/g, "_"); }
+
+function wCode(b) {
+  if (!b.ok) return `<div class="wcart erree"><div class="wtype"><b>code</b></div>
+    <div class="wnote">${echapper(b.erreur)}</div></div>`;
+  const plages = b.plages || [];
+  const pl = plages.length ? plages.map(([a, z]) => `${a}–${z}`).join(", ") : "fichier entier";
+  return `<div class="wcode" id="${idCode(b.chemin_code)}">
+    <div class="whead"><b>${echapper(b.chemin_code)}</b>
+      <span>lignes ${pl}</span>
+      <a class="wlien" href="/code?p=${encodeURIComponent(b.chemin_code)}" target="_blank">brut ↗</a></div>
+    <div class="wscroll"></div>
+    <div class="wzoom">grisé = hors sujet · ${plages.length} plage(s) en vie</div></div>`;
+}
+
+async function remplirCode(b) {
+  const conteneur = document.getElementById(idCode(b.chemin_code));
+  if (!conteneur) return;
+  const scroll = conteneur.querySelector(".wscroll");
+  const d = await api(`/api/codefile?depot=${encodeURIComponent(b.attrs.depot)}&chemin=${encodeURIComponent(b.attrs.chemin)}`);
+  const lignes = d.texte.split("\n");
+  const dans = i => (b.plages || []).some(([a, z]) => i + 1 >= a && i + 1 <= z);
+  const lang = LANGS[(b.attrs.chemin.split(".").pop() || "").toLowerCase()] ?? null;
+  const hl = window.hljs && lang ? t => hljs.highlight(t, { language: lang, ignoreIllegals: true }).value
+    : t => echapper(t);
+  const rouge = i => lignes[i] ?? "";
+  let html = "<table>";
+  const nMax = Math.min(lignes.length, 3000);
+  for (let i = 0; i < nMax; i++) {
+    const vie = dans(i);
+    html += `<tr class="${vie ? "vie" : "dim"}"><td class="num">${i + 1}</td>` +
+            `<td class="ligne">${hl(rouge(i)) || "&nbsp;"}</td></tr>`;
+  }
+  html += "</table>";
+  scroll.innerHTML = html;
+  const premiere = lignes.findIndex((_, i) => dans(i));
+  if (premiere >= 0) {
+    const tr = scroll.querySelectorAll("tr")[premiere];
+    if (tr) tr.scrollIntoView({ block: "start" });
+  }
+}
+
+function badgeEtat(e) { return `<span class="badge ord-${echapper(e)}">${echapper(e)}</span>`; }
+
+async function ouvrirOrdonnances() {
+  const d = await api("/api/ordonnance");
+  ficheCourante = null;
+  $("ptitre").textContent = "Ordonnances";
+  $("pmeta").innerHTML = `<span class="badge">${d.ordonnances.length} préparée(s)</span>`;
+  $("pactions").innerHTML = "";
+  const chantier = $("casq").value;
+  const liste = d.ordonnances.map(o => `
+    <div class="wcart" style="cursor:pointer" data-ord="${echapper(o.nom)}">
+      <div class="wtype">${badgeEtat(o.etat)} · ${echapper(o.chantier || "sans chantier")}
+        ${o.depot ? `· dépôt <b>${echapper(o.depot)}</b>` : ""}</div>
+      <div style="font-size:14px">${echapper(o.nom.replace(/^\d{8} — /, ""))}</div>
+      ${o.question ? `<div class="wnote">${echapper(o.question)}</div>` : ""}
+    </div>`).join("") || '<p class="vide">aucune ordonnance — l\'agent en prépare pendant les sessions</p>';
+  $("pcorps").innerHTML = `<div class="sect"><div class="titre-sect">Liste</div>${liste}</div>`;
+  $("panel").classList.add("ouvert");
+  $("pcorps").querySelectorAll("[data-ord]").forEach(el =>
+    el.onclick = () => ouvrirOrdonnance(el.dataset.ord));
+}
+
+async function ouvrirOrdonnance(nom) {
+  let o;
+  try { o = await api(`/api/ordonnance?nom=${encodeURIComponent(nom)}`); }
+  catch (e) { toast("ordonnance introuvable", true); return; }
+  ficheCourante = null;
+  $("ptitre").textContent = o.nom.replace(/^\d{8} — /, "");
+  $("pmeta").innerHTML = badgeEtat(o.etat) +
+    `<span class="badge">${echapper(o.chantier || "sans chantier")}</span>` +
+    (o.depot ? `<span class="badge">dépôt&nbsp;: ${echapper(o.depot)}</span>` : "");
+  const actions = [];
+  if (o.etat === "preparee") {
+    actions.push(`<button class="btn primaire" id="o-signer">Signer</button>`);
+    actions.push(`<button class="btn" id="o-editer">Éditer</button>`);
+  }
+  if (o.etat === "signee" && o.depot)
+    actions.push(`<button class="btn primaire" id="o-confier">Confier au dépôt</button>`);
+  $("pactions").innerHTML = actions.join(" ");
+  const cartes = o.blocs.map(b =>
+    b.type === "pdf" ? wPdf(b) :
+    b.type === "fiche" ? wFiche(b) :
+    b.type === "code" ? wCode(b) : wAutre(b)).join("");
+  $("pcorps").innerHTML = `
+    ${o.question ? `<div class="sect"><div class="titre-sect">Question</div>
+      <div class="md">${echapper(o.question)}</div></div>` : ""}
+    <div class="sect"><div class="titre-sect">Passages</div>${cartes || '<p class="vide">aucun passage</p>'}</div>`;
+  $("panel").classList.add("ouvert");
+  for (const b of o.blocs) if (b.type === "code" && b.ok) remplirCode(b).catch(() => {});
+  $("pcorps").querySelectorAll("[data-ouvrir-fiche]").forEach(el =>
+    el.onclick = () => ouvrirFiche(el.dataset.ouvrirFiche));
+  const signer = $("o-signer");
+  if (signer) signer.onclick = async () => {
+    try {
+      await api("/api/ordonnance/etat", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nom, etat: "signee" }) });
+      toast("ordonnance signée — l'agent de codage peut la recevoir");
+      await ouvrirOrdonnance(nom);
+    } catch (e) { toast(e.message, true); }
+  };
+  const confier = $("o-confier");
+  if (confier) confier.onclick = async () => {
+    try {
+      await api("/api/ordonnance/etat", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nom, etat: "confiee" }) });
+      toast(`ordonnance confiée → ${o.depot}/sessions/`);
+      await ouvrirOrdonnance(nom);
+    } catch (e) { toast(e.message, true); }
+  };
+  const editer = $("o-editer");
+  if (editer) editer.onclick = () => formulaireOrdonnance(o);
+}
+
+function formulaireOrdonnance(o) {
+  $("pcorps").innerHTML = `
+    <form id="form-ord">
+      <div><label>Question</label>
+        <input type="text" id="o-question" value="${echapper(o.question)}"></div>
+      <div><label>Corps — blocs fence : pdf / code / fiche</label>
+        <textarea id="o-corps" style="min-height:300px">${echapper(o.corps)}</textarea></div>
+      <div class="boutons">
+        <button class="btn primaire" type="submit">Enregistrer</button>
+        <button class="btn" type="button" id="o-annuler">Annuler</button>
+        <span id="omsg"></span>
+      </div></form>`;
+  $("o-annuler").onclick = () => ouvrirOrdonnance(o.nom);
+  $("form-ord").onsubmit = async ev => {
+    ev.preventDefault();
+    try {
+      await api("/api/ordonnance", { method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nom: o.nom, corps: $("o-corps").value,
+          question: $("o-question").value }) });
+      toast("ordonnance enregistrée");
+      await ouvrirOrdonnance(o.nom);
+    } catch (e) { $("omsg").textContent = e.message; $("omsg").className = "msg-err"; }
+  };
+}
+
+$("b-ord").onclick = () => ouvrirOrdonnances().catch(e => toast(e.message, true));
 
 /* ------------------------------------------------- départ */
 $("casq").addEventListener("change", appliquerEclairage);

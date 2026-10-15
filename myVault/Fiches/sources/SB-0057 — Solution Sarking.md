@@ -4,7 +4,7 @@ author: user
 domaines: [métier, thermique]
 source: SB-0057
 ouvrage: "Isover/Saint-Gobain, « L'isolation thermique et acoustique des toitures en solution Sarking » (12 p., 2015)"
-lie: ["[[Sapientpearwood]]"]
+lie: ["[[Sapientpearwood]]", "[[SB-0053 — Construction de maisons à ossature bois]]"]
 ---
 # Solution Sarking — isolation des toitures par l'extérieur
 

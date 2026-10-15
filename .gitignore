@@ -10,12 +10,12 @@ lib/
 # (les artefacts app et les données personnelles restent hors git)
 myVault/*
 !myVault/Fiches/
-!myVault/Casquettes/
+!myVault/Chantiers/
 !myVault/Notes/
 !myVault/Projets/
 myVault/biblio/
 myVault/Inbox/
 myVault/Archives/
 myVault/Projets/*/
-myVault/Casquettes/*/
+myVault/Chantiers/*/
 myVault/Archipel.html
