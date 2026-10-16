@@ -33,7 +33,9 @@ import json
 import re
 import sqlite3
 import sys
+import urllib.error
 import urllib.parse
+import urllib.request
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -136,7 +138,8 @@ def ecrire_fiche(titre: str, corps: str, nouveau_titre=None,
     return lire_fiche(titre)
 
 
-def creer_fiche(titre: str, type_f: str, corps: str, domaines=None) -> dict:
+def creer_fiche(titre: str, type_f: str, corps: str, domaines=None,
+                genese: str = "") -> dict:
     titre = titre.strip()
     if not re.match(r"^[^/\\:*?\"<>|]{3,140}$", titre):
         raise ValueError("titre invalide (3-140 car., sans /\\:*?\"<>|)")
@@ -149,6 +152,8 @@ def creer_fiche(titre: str, type_f: str, corps: str, domaines=None) -> dict:
     fm = ["type: " + type_f, "author: user"]
     if doms:
         fm.append("domaines: [" + ", ".join(doms) + "]")
+    if genese:
+        fm.append(f'genese: "{genese}"')
     fm.append(f"created: {date.today().isoformat()}")
     p = FICHES / dossier / f"{titre}.md"
     p.parent.mkdir(exist_ok=True)
@@ -514,6 +519,151 @@ def etat_ordonnance(nom: str, etat: str) -> dict:
     return lire_ordonnance(nom)
 
 
+# ------------------------------------------------------------- compagnon (LLM)
+
+# config des modèles — data/llm.json, éditable à la main
+LLM_DEFAUT = {"url": "http://localhost:11434",
+              "synthese": "gemma4:12b", "vision": "qwen3-vl",
+              "fond": "qwen3.6:27b"}
+
+
+def llm_config() -> dict:
+    p = ROOT / "data" / "llm.json"
+    if p.is_file():
+        try:
+            return {**LLM_DEFAUT, **json.loads(p.read_text(encoding="utf-8"))}
+        except (json.JSONDecodeError, OSError):
+            pass
+    return dict(LLM_DEFAUT)
+
+
+# ------------------------------------------------------------- panier
+
+# le panier : une liste de blocs (même format que les ordonnances),
+# fichier-backed, traversée par le compagnon et les ordonnances
+
+def panier_lire() -> list[dict]:
+    p = ROOT / "data" / "panier.json"
+    if not p.is_file():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def panier_ecrire(blocs: list[dict]):
+    (ROOT / "data" / "panier.json").write_text(
+        json.dumps(blocs, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def panier_resolu() -> list[dict]:
+    return [_resoudre_bloc(b) for b in panier_lire()]
+
+
+def _extraire(b: dict) -> str:
+    """La matière d'un bloc, en texte — ce que le compagnon lira."""
+    t, a = b["type"], b["attrs"]
+    if t == "pdf" and b.get("ok"):
+        try:
+            import pymupdf
+            with pymupdf.open(b["chemin_pdf"]) as doc:
+                page = min(max(b.get("page", 1), 1), doc.page_count)
+                texte = doc[page - 1].get_text()
+            return f"[{t} · {a.get('doc', '')} · page {page}]\n{texte[:4000]}"
+        except Exception as e:
+            return f"[{t} · {a.get('doc', '')}] (illisible : {e})"
+    if t == "code" and b.get("ok"):
+        p = code_autorise(b["chemin_code"])
+        if p:
+            lignes = p.read_text(encoding="utf-8", errors="replace").split("\n")
+            morceaux = []
+            for deb, fin in (b.get("plages") or [(1, min(len(lignes), 120))]):
+                sel = lignes[deb - 1:fin]
+                num = "\n".join(f"{deb + i:4d} {l}" for i, l in enumerate(sel))
+                morceaux.append(num)
+            return f"[{t} · {b['chemin_code']}]\n" + "\n…\n".join(morceaux)[:6000]
+    if t == "fiche" and b.get("ok"):
+        f = b["fiche"]
+        return f"[fiche · {f['titre']}]\n{f['corps'][:3000]}"
+    return f"[{t}] {b.get('erreur', '(résolution impossible)')}"
+
+
+def _panier_vers_markdown(blocs: list[dict]) -> str:
+    out = []
+    for b in blocs:
+        entete = "\n".join(f"{k}: {v}" for k, v in b.get("attrs", {}).items())
+        out.append(f"```{b['type']}\n{entete}\n\n{b.get('corps', '')}\n```")
+    return "\n\n".join(out)
+
+
+SYSTEME_COMPAGNON = (
+    "Tu es le compagnon de session de l'Archipel, l'environnement de travail "
+    "d'un artisan-chercheur. On te donne des passages choisis (pages de PDF, "
+    "plages de code, fiches) et une question. Ta production est un BROUILLON "
+    "de travail : synthétise, croise, pointe les tensions, propose des pistes. "
+    "Tu ne décides rien : l'utilisateur élèvera ce qui mérite de l'être. "
+    "Quand une structure aide, produis un diagramme en bloc ```mermaid. "
+    "Réponds en français, dense, sans remplissage."
+)
+
+
+def llm_stream(self, tache: str, question: str):
+    """SSE : le compagnon travaille sur le panier, en streaming."""
+    cfg = llm_config()
+    modele = cfg.get(tache) or cfg["synthese"]
+    blocs = panier_resolu()
+    if not blocs:
+        self._json(400, {"erreur": "panier vide"})
+        return
+    matiere = "\n\n".join(_extraire(b) for b in blocs)
+    messages = [
+        {"role": "system", "content": SYSTEME_COMPAGNON},
+        {"role": "user", "content": f"## Question\n{question}\n\n## Passages du panier\n{matiere}"},
+    ]
+    body = json.dumps({"model": modele, "messages": messages, "stream": True,
+                       "options": {"num_ctx": 16384}}).encode()
+    self.send_response(200)
+    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    self.send_header("Cache-Control", "no-cache")
+    self.end_headers()
+    try:
+        req = urllib.request.Request(cfg["url"] + "/api/chat", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=600) as rep:
+            for ligne in rep:
+                if not ligne.strip():
+                    continue
+                d = json.loads(ligne)
+                msg = d.get("message", {})
+                pensee, morceau = msg.get("thinking", ""), msg.get("content", "")
+                if pensee:
+                    ev = json.dumps({"t": pensee, "reflechit": True}, ensure_ascii=False)
+                    self.wfile.write(f"data: {ev}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                if morceau:
+                    ev = json.dumps({"t": morceau}, ensure_ascii=False)
+                    self.wfile.write(f"data: {ev}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                if d.get("done"):
+                    break
+        self.wfile.write(b"data: [DONE]\n\n")
+    except (urllib.error.URLError, OSError) as e:
+        self.wfile.write(f"data: {json.dumps({'erreur': f'Ollama injoignable : {e}'}, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+
+def elever(titre: str, type_f: str, corps: str, domaines=None, genese: str = "") -> dict:
+    """Élévation d'un brouillon en fiche : l'utilisateur signe, la lignée
+    du compagnon reste tracée (genese:)."""
+    f = creer_fiche(titre, type_f, corps, domaines)
+    if genese:
+        p = fichier_de(f["titre"])
+        _a, fm, _c = sep_crlf(p.read_text(encoding="utf-8"))
+        fm = set_champ_simple(fm, "genese", genese)
+        p.write_text(f"---\n{fm}\n---\n{f['corps']}\n", encoding="utf-8")
+    return lire_fiche(f["titre"])
+
+
 # ------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -613,6 +763,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(404, {"erreur": "ordonnance introuvable"})
             else:
                 self._json(200, {"ordonnances": ordonnances()})
+        elif u.path == "/api/panier":
+            self._json(200, {"blocs": panier_resolu()})
         elif u.path == "/api/codefile":
             p = code_autorise(f"{q1('depot')}/{q1('chemin')}")
             if p is None:
@@ -639,9 +791,18 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         try:
             d = json.loads(self.rfile.read(n).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._json(400, {"erreur": "corps de requête illisible (UTF-8 attendu)"})
+            return
+        if u == "/api/llm":
+            # le flux SSE gère ses propres en-têtes — hors du try JSON
+            llm_stream(self, d.get("tache", "synthese"), d.get("question", ""))
+            return
+        try:
             if u == "/api/fiche":
                 self._json(200, creer_fiche(d["titre"], d.get("type", "note"),
-                                            d.get("corps", ""), d.get("domaines")))
+                                            d.get("corps", ""), d.get("domaines"),
+                                            d.get("genese", "")))
             elif u == "/api/lien":
                 lien_modifier(d["a"], d["b"], "lie", True)
                 self._json(200, {"ok": True})
@@ -653,6 +814,27 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, creer_ordonnance(d["titre"], d.get("chantier", ""),
                                                  d.get("question", ""), d.get("corps", ""),
                                                  d.get("depot", "")))
+            elif u == "/api/panier":
+                blocs = panier_lire()
+                blocs.append({"type": d["type"], "attrs": d.get("attrs", {}),
+                              "corps": d.get("corps", "")})
+                panier_ecrire(blocs)
+                self._json(200, {"ok": True, "n": len(blocs)})
+            elif u == "/api/panier/vider":
+                panier_ecrire([])
+                self._json(200, {"ok": True})
+            elif u == "/api/panier/ordonnance":
+                if not panier_lire():
+                    raise ValueError("panier vide")
+                corps = _panier_vers_markdown(panier_resolu())
+                o = creer_ordonnance(d["titre"], d.get("chantier", ""),
+                                     d.get("question", ""), corps, d.get("depot", ""))
+                panier_ecrire([])
+                self._json(200, o)
+            elif u == "/api/elever":
+                self._json(200, elever(d["titre"], d.get("type", "note"),
+                                       d.get("corps", ""), d.get("domaines"),
+                                       d.get("genese", "")))
             elif u == "/api/ordonnance/etat":
                 self._json(200, etat_ordonnance(d["nom"], d["etat"]))
             else:
@@ -695,6 +877,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True})
             elif u == "/api/suggere":
                 lien_modifier(q1("a"), q1("b"), "suggere", False)
+                self._json(200, {"ok": True})
+            elif u == "/api/panier":
+                if q1("tout"):
+                    panier_ecrire([])
+                else:
+                    blocs = panier_lire()
+                    i = int(q1("i", "-1")) if q1("i").lstrip("-").isdigit() else -1
+                    if 0 <= i < len(blocs):
+                        blocs.pop(i)
+                        panier_ecrire(blocs)
                 self._json(200, {"ok": True})
             else:
                 self.send_error(404)

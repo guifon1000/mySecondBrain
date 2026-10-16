@@ -6,6 +6,7 @@
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 <script src="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script src="https://unpkg.com/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
     --mer: #0d1b2a;        /* fond */
@@ -113,6 +114,36 @@
   .wcode .wzoom { padding: 7px 14px; border-top: 1px solid var(--fil);
     font-size: 12.5px; color: var(--brume); }
   .wcode .wzoom button { margin-left: 8px; }
+
+  /* ---------- panier + compagnon ---------- */
+  #panier-btn { position: fixed; right: 22px; bottom: 22px; z-index: 30;
+    width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--fil);
+    background: var(--creux); color: var(--or); font-size: 22px; cursor: pointer;
+    box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+  #panier-btn:hover { border-color: var(--or); }
+  #panier-btn .nb { position: absolute; top: -4px; right: -2px; background: var(--or);
+    color: var(--mer); border-radius: 999px; font-size: 11px; padding: 1px 7px;
+    font-weight: 700; display: none; }
+  #panier { position: fixed; right: 22px; bottom: 84px; z-index: 30; width: 380px;
+    max-height: 62vh; overflow: auto; background: var(--creux);
+    border: 1px solid var(--fil); border-radius: 12px; padding: 16px;
+    display: none; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #panier.on { display: block; }
+  #panier h3 { margin: 0 0 10px; font-size: 15px; }
+  #panier .pitem { display: flex; align-items: baseline; gap: 8px; padding: 5px 0;
+    border-bottom: 1px solid var(--fil); font-size: 13px; }
+  #panier .pitem .t { flex: 1; cursor: default; }
+  #panier .pitem .vx { border: none; background: none; color: var(--brume); cursor: pointer; }
+  #panier .pitem .vx:hover { color: var(--corail); }
+  #panier textarea { width: 100%; min-height: 54px; margin: 10px 0 8px; }
+  #panier .pligne { display: flex; gap: 8px; }
+  #synthese .md pre { background: var(--plage); padding: 10px 12px;
+    border-radius: 8px; overflow-x: auto; font-size: 12.5px; }
+  #synthese .md .mermaid { background: #f4f7fb; border-radius: 8px;
+    padding: 10px; margin: 10px 0; }
+  .pensee { color: var(--lune); font-size: 12px; line-height: 1.45;
+    border-left: 2px solid var(--fil); padding: 6px 10px; margin-bottom: 10px;
+    max-height: 150px; overflow: auto; white-space: pre-wrap; }
   #pactions { display: flex; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--fil); }
   #pcorps { padding: 14px 18px 24px; overflow-y: auto; flex: 1; line-height: 1.6; }
   #pcorps::-webkit-scrollbar { width: 9px; }
@@ -248,6 +279,18 @@
   </div>
 </div>
 
+<button id="panier-btn" title="panier">🧺<span class="nb" id="panier-nb"></span></button>
+<div id="panier">
+  <h3>Le panier</h3>
+  <div id="panier-liste"></div>
+  <textarea id="panier-q" placeholder="la question que tu poses au compagnon — il ne verra QUE ces passages"></textarea>
+  <div class="pligne">
+    <button class="btn primaire" id="p-synth">Synthèse</button>
+    <button class="btn" id="p-ord">→ Ordonnance</button>
+    <button class="btn" id="p-vider">Vider</button>
+  </div>
+  <span id="p-msg"></span>
+</div>
 <div id="toasts"></div>
 
 <script>
@@ -366,7 +409,8 @@ async function ouvrirFiche(titre, mots = []) {
     (f.source ? `<span class="badge">${echapper(f.source)}</span>` : "");
   $("pactions").innerHTML = `
     <button class="btn primaire" id="a-editer">Éditer</button>
-    ${enCarte ? `<button class="btn" id="a-relier">Relier à…</button>` : ""}`;
+    ${enCarte ? `<button class="btn" id="a-relier">Relier à…</button>` : ""}
+    <button class="btn" id="a-panier" title="ajouter au panier">🧺 panier</button>`;
   const doms = f.domaines?.length
     ? f.domaines.map(d => `<span class="chip dom">${echapper(d)}</span>`).join("") : "";
   const lie = (f.lie || []).map(t => `
@@ -399,6 +443,8 @@ async function ouvrirFiche(titre, mots = []) {
   $("pcorps").querySelectorAll("[data-ouvrir]").forEach(el =>
     el.onclick = e => { if (e.target === el) ouvrirFiche(el.dataset.ouvrir); });
   $("a-editer").onclick = () => formulaireEdition(f);
+  $("a-panier").onclick = () => ajouterPanier({ type: "fiche",
+    attrs: { titre: f.titre }, corps: "" });
   const bRelier = $("a-relier");
   if (bRelier) bRelier.onclick = () => demarrerRelier(titre);
   $("pcorps").querySelectorAll("[data-del-lien]").forEach(b => b.onclick = async e => {
@@ -555,7 +601,9 @@ $("n-ok").onclick = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ titre: $("n-titre").value, type: $("n-type").value,
         corps: $("n-corps").value,
-        domaines: $("n-dom").value.split(",").map(s => s.trim()).filter(Boolean) }) });
+        domaines: $("n-dom").value.split(",").map(s => s.trim()).filter(Boolean),
+        genese: geneseCourante || "" }) });
+    geneseCourante = null;
     toast("fiche créée"); fermerModal();
     await chargerGraphe(); await ouvrirFiche(res.titre);
   } catch (e) { $("n-msg").textContent = e.message; $("n-msg").className = "msg-err"; }
@@ -717,6 +765,17 @@ async function ouvrirOrdonnance(nom) {
     ${o.question ? `<div class="sect"><div class="titre-sect">Question</div>
       <div class="md">${echapper(o.question)}</div></div>` : ""}
     <div class="sect"><div class="titre-sect">Passages</div>${cartes || '<p class="vide">aucun passage</p>'}</div>`;
+  ordCourante = o;
+  // bouton 🧺 sur chaque widget → panier (même ordre que les blocs)
+  const els = [...$("pcorps").querySelectorAll(".wcart, .wcode .whead")];
+  o.blocs.forEach((b, i) => {
+    const el = els[i];
+    if (!el) return;
+    const pin = document.createElement("button");
+    pin.className = "btn mini"; pin.textContent = "🧺"; pin.title = "ajouter au panier";
+    pin.onclick = () => ajouterPanier({ type: b.type, attrs: b.attrs, corps: b.corps });
+    el.appendChild(pin);
+  });
   $("panel").classList.add("ouvert");
   for (const b of o.blocs) if (b.type === "code" && b.ok) remplirCode(b).catch(() => {});
   $("pcorps").querySelectorAll("[data-ouvrir-fiche]").forEach(el =>
@@ -772,6 +831,126 @@ function formulaireOrdonnance(o) {
 }
 
 $("b-ord").onclick = () => ouvrirOrdonnances().catch(e => toast(e.message, true));
+
+/* ------------------------------------------------- panier + compagnon */
+let panierBlocs = [];
+let geneseCourante = null;
+let ordCourante = null;
+
+function idBloc(b) {
+  return b.type + "|" + (b.attrs.doc || b.attrs.titre || b.attrs.chemin || "");
+}
+
+async function panierMaj() {
+  const d = await api("/api/panier");
+  panierBlocs = d.blocs;
+  const nb = $("panier-nb");
+  nb.style.display = panierBlocs.length ? "block" : "none";
+  nb.textContent = panierBlocs.length;
+  $("panier-liste").innerHTML = panierBlocs.map((b, i) => {
+    const t = b.type === "pdf" ? `${b.attrs.doc || ""} p.${b.attrs.page || "?"}` :
+              b.type === "code" ? `${b.attrs.chemin || ""} · ${b.attrs.lignes || "tout"}` :
+              b.attrs.titre || "?";
+    return `<div class="pitem"><span class="badge ${b.type}">${b.type}</span>
+      <span class="t">${echapper(t)}</span>
+      <button class="vx" data-pdel="${i}">×</button></div>`;
+  }).join("") || '<p class="vide">vide — ajoute des passages depuis les fiches et les ordonnances</p>';
+  $("panier-liste").querySelectorAll("[data-pdel]").forEach(b =>
+    b.onclick = async () => {
+      await api(`/api/panier?i=${b.dataset.pdel}`, { method: "DELETE" });
+      panierMaj();
+    });
+}
+
+async function ajouterPanier(bloc) {
+  if (panierBlocs.some(b => idBloc(b) === idBloc(bloc))) { toast("déjà dans le panier"); return; }
+  await api("/api/panier", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bloc) });
+  toast("ajouté au panier");
+  panierMaj();
+}
+
+$("panier-btn").onclick = async () => {
+  const el = $("panier");
+  el.classList.toggle("on");
+  if (el.classList.contains("on")) panierMaj();
+};
+$("p-vider").onclick = async () => { await api("/api/panier?tout=1", { method: "DELETE" }); panierMaj(); };
+$("p-ord").onclick = async () => {
+  if (!panierBlocs.length) { $("p-msg").textContent = "panier vide"; return; }
+  try {
+    const o = await api("/api/panier/ordonnance", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titre: "Panier du " + new Date().toLocaleDateString("fr-FR").replace(/\//g, "-"),
+        chantier: $("casq").value, question: $("panier-q").value.trim() }) });
+    toast("ordonnance préparée depuis le panier");
+    $("panier").classList.remove("on");
+    await ouvrirOrdonnance(o.nom);
+  } catch (e) { $("p-msg").textContent = e.message; }
+};
+$("p-synth").onclick = () => lancerSynthese().catch(e => toast(e.message, true));
+
+async function lancerSynthese() {
+  const question = $("panier-q").value.trim();
+  if (!question) { $("p-msg").textContent = "pose ta question au compagnon"; return; }
+  $("panier").classList.remove("on");
+  ficheCourante = null;
+  $("ptitre").textContent = "Le compagnon";
+  $("pmeta").innerHTML = '<span class="badge">synthèse du panier · brouillon</span>';
+  $("pactions").innerHTML = "";
+  $("pcorps").innerHTML = '<div class="sect"><div class="titre-sect">Brouillon — rien n\'est écrit dans le vault</div>' +
+    '<div class="md" id="synthese"></div></div>';
+  $("panel").classList.add("ouvert");
+  const cible = $("synthese");
+  let texte = "", pensee = "", dernierRendu = 0;
+  const rendu = final => {
+    let html = pensee ? `<div class="pensee">${echapper(pensee)}</div>` : "";
+    html += marked.parse(texte);
+    html = html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
+      (_m, code) => `<div class="mermaid">${code}</div>`);
+    cible.innerHTML = html + (final ? "" : ' <span style="color:var(--or)">▍</span>');
+    if (final && window.mermaid) {
+      mermaid.initialize({ startOnLoad: false, theme: "neutral" });
+      mermaid.run({ nodes: cible.querySelectorAll(".mermaid") }).catch(() => {});
+    }
+  };
+  const rep = await fetch("/api/llm", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tache: "synthese", question }) });
+  if (!rep.ok) { const e = await rep.json().catch(() => ({})); toast(e.erreur || "compagnon indisponible", true); return; }
+  const lect = rep.body.getReader();
+  const dec = new TextDecoder();
+  let tampon = "";
+  for (;;) {
+    const { done, value } = await lect.read();
+    if (done) break;
+    tampon += dec.decode(value, { stream: true });
+    let idx;
+    while ((idx = tampon.indexOf("\n\n")) >= 0) {
+      const evt = tampon.slice(0, idx);
+      tampon = tampon.slice(idx + 2);
+      if (!evt.startsWith("data: ")) continue;
+      const charge = evt.slice(6);
+      if (charge === "[DONE]") { rendu(true); continue; }
+      try {
+        const d = JSON.parse(charge);
+        if (d.erreur) toast(d.erreur, true);
+        else if (d.reflechit) { pensee += d.t; rendu(false); }
+        else { texte += d.t; const t = performance.now();
+          if (t - dernierRendu > 180) { rendu(false); dernierRendu = t; } }
+      } catch (_) {}
+    }
+  }
+  rendu(true);
+  if (!texte.trim()) { cible.innerHTML = '<span class="vide">réponse vide</span>'; return; }
+  $("pactions").innerHTML = '<button class="btn primaire" id="a-elever">Élever en note</button>';
+  $("a-elever").onclick = () => {
+    geneseCourante = "brouillon compagnon — synthèse de panier";
+    $("n-titre").value = ""; $("n-corps").value = texte; $("n-dom").value = "";
+    $("n-type").value = "note"; $("doublons-liste").innerHTML = ""; $("n-msg").textContent = "";
+    $("voile").classList.add("on"); $("n-titre").focus();
+  };
+}
 
 /* ------------------------------------------------- départ */
 $("casq").addEventListener("change", appliquerEclairage);
