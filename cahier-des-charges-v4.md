@@ -104,6 +104,34 @@ Le prototype d'une session peut prendre la forme d'un `ipynb` :
   jamais de convertisseur nous-mêmes. On livre l'ipynb + une ligne de
   consigne dans l'ordonnance.
 
+## Le compagnon — modèle local (v4.1)
+
+Un modèle local via **Ollama** embarque dans l'environnement. Le cadre
+ne change pas : le vault reste hors de sa portée ; sa production est une
+**zone de brouillon** ; l'élévation en fiche reste le geste de l'humain
+(`author: user`, `genese:` pour la lignée honnête).
+
+Rôle : **étoffer, synthétiser, schématiser** — le travail d'altitude que
+l'humain arbitre, pas celui qu'il délègue aveuglément.
+
+- **Le panier** : l'utilisateur accumule passages, fiches, croquis
+  depuis la page ; le modèle synthétise/croise/rédige en brouillon,
+  streamé dans l'UI ; élévation possible en fiche.
+- **Schémas** : le modèle produit du mermaid, la page le rend — pas
+  besoin de modèle de dessin.
+- **Cueillage assisté** : candidats de passages proposés, validés ou
+  balayés par l'humain.
+- **Croquis lus** : modèle vision (qwen3-vl) → transcription, liens
+  proposés.
+
+Stack mesurée (RTX 3060 12 Go) : gemma4:12b — 15 tok/s, 100 % GPU,
+8k ctx — porte la conversation ; qwen3-vl porte la vision ; qwen3.6:27b
+(dépasse la VRAM → offload CPU, lent) réserve aux synthèses de fond.
+Architecturalement : une route proxy `/api/llm` qui construit le prompt
+DEPUIS les objets résolus du panier — rien ne sort de la machine, la
+conversation n'a pas d'état caché (les échanges vivent dans les
+fichiers de session).
+
 ## La règle d'or : l'agent paie en traçabilité
 
 Toute intervention de l'agent dans un dépôt laisse derrière elle une
