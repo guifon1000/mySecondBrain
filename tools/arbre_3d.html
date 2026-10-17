@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>L'Arbre</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --mer: #0d1b2a; --creux: #101f30; --fil: #23384e;
+    --ecume: #dce8f5; --brume: #8fa3b8; --or: #ffd54f; --sable: #e8a13c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--mer);
+    color: var(--ecume); font-family: "Segoe UI", system-ui, sans-serif; }
+  #scene { position: fixed; inset: 0; }
+  #titre { position: fixed; top: 14px; left: 18px; z-index: 5; user-select: none; }
+  #titre h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: .02em; }
+  #titre h1 span { color: var(--or); }
+  #titre p { margin: 3px 0 0; font-size: 12px; color: var(--brume); }
+  #infobulle { position: fixed; z-index: 6; pointer-events: none; display: none;
+    background: var(--creux); border: 1px solid var(--fil); border-radius: 8px;
+    padding: 6px 11px; font-size: 13px; max-width: 300px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.45); }
+  #infobulle .dom { color: var(--brume); font-size: 11px; }
+  #panneau { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 7;
+    background: color-mix(in srgb, var(--creux) 96%, transparent);
+    border-left: 1px solid var(--fil); padding: 20px 22px; overflow: auto;
+    transform: translateX(100%); transition: transform .25s ease; }
+  #panneau.ouvert { transform: none; }
+  #panneau h2 { font-family: Georgia, serif; font-size: 19px; margin: 6px 0 10px;
+    line-height: 1.3; }
+  #panneau .badge { display: inline-block; padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--brume); color: var(--brume); font-size: 11.5px; margin-right: 6px; }
+  #panneau .corps { font-size: 13.5px; line-height: 1.55; color: var(--ecume);
+    white-space: pre-wrap; margin-top: 12px; }
+  #panneau .greffes { margin-top: 14px; font-size: 12.5px; color: var(--brume); }
+  #panneau .greffes span { display: inline-block; background: var(--creux);
+    border: 1px solid var(--fil); border-radius: 999px; padding: 3px 10px; margin: 2px; }
+  #panneau .close { position: absolute; top: 12px; right: 14px; border: none;
+    background: none; color: var(--brume); font-size: 17px; cursor: pointer; }
+  #legende { position: fixed; bottom: 14px; left: 18px; z-index: 5; font-size: 11.5px;
+    color: var(--brume); user-select: none; }
+  #legende .ligne { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+  #legende .trait { width: 26px; height: 2px; }
+  #retour { position: fixed; top: 14px; right: 18px; z-index: 5; }
+  #retour a { color: var(--brume); font-size: 13px; text-decoration: none; }
+  #retour a:hover { color: var(--or); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="scene"></div>
+<div id="titre"><h1>L'Arbre <span>·</span> Archipel</h1>
+  <p>la canopée à toi, le bois à l'IA — fais tourner, zoome, touche une feuille</p></div>
+<div id="retour"><a href="/">← l'Archipel</a></div>
+<div id="infobulle"></div>
+<div id="panneau"><button class="close" id="p-close">×</button>
+  <div id="p-contenu"></div></div>
+<div id="legende">
+  <div class="ligne"><span class="trait" style="background:#8fa3b8"></span> même branche — lien confirmé</div>
+  <div class="ligne"><span class="trait" style="background:var(--or)"></span> greffe — recoupement entre branches</div>
+  <div class="ligne"><span class="trait" style="background:var(--sable); border-top:2px dashed var(--sable); height:0"></span> suggestion de l'agent</div>
+</div>
+<script type="module">
+import * as THREE from "three";
+
+/* ------------------------------------------------- scène */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1b2a);
+scene.fog = new THREE.FogExp2(0x0d1b2a, 0.019);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+const rendu = new THREE.WebGLRenderer({ antialias: true });
+rendu.setSize(innerWidth, innerHeight);
+rendu.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.getElementById("scene").appendChild(rendu.domElement);
+
+scene.add(new THREE.HemisphereLight(0x9db4c8, 0x1a120b, 0.85));
+const soleil = new THREE.DirectionalLight(0xffd591, 1.15);
+soleil.position.set(6, 10, 4);
+scene.add(soleil);
+
+/* sol */
+const sol = new THREE.Mesh(
+  new THREE.CircleGeometry(40, 48),
+  new THREE.MeshStandardMaterial({ color: 0x08101b, roughness: 1 }));
+sol.rotation.x = -Math.PI / 2;
+sol.position.y = -0.02;
+scene.add(sol);
+
+/* ------------------------------------------------- orbit maison */
+const cible = new THREE.Vector3(0, 4.6, 0);
+let theta = 0.6, phi = 1.24, rayon = 20;
+function cam() {
+  camera.position.set(
+    cible.x + rayon * Math.sin(phi) * Math.sin(theta),
+    cible.y + rayon * Math.cos(phi),
+    cible.z + rayon * Math.sin(phi) * Math.cos(theta));
+  camera.lookAt(cible);
+}
+let tourne = true;
+addEventListener("pointerdown", () => tourne = false);
+addEventListener("wheel", () => tourne = false);
+addEventListener("pointermove", e => {
+  if (e.buttons === 1) {
+    theta -= e.movementX * 0.005;
+    phi = Math.min(Math.max(phi - e.movementY * 0.004, 0.25), 1.45);
+  }
+});
+addEventListener("wheel", e => {
+  rayon = Math.min(Math.max(rayon * (1 + Math.sign(e.deltaY) * 0.09), 7), 55);
+}, { passive: true });
+cam();
+
+/* ------------------------------------------------- croissance */
+const BOIS = new THREE.MeshStandardMaterial({ color: 0x5e4128, roughness: 0.95 });
+const BOIS_TIP = new THREE.MeshStandardMaterial({ color: 0x6f4f30, roughness: 0.9 });
+const AXE = new THREE.Vector3(0, 1, 0);
+
+function segment(p0, p1, r0, r1, mat) {
+  const dir = p1.clone().sub(p0);
+  const long = dir.length();
+  const geo = new THREE.CylinderGeometry(r1, r0, long, 6);
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(p0).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(AXE, dir.normalize());
+  scene.add(m);
+}
+
+/* branche courbée : n segments, incurvation déterministe (seed = variété) */
+function branche(origine, dir, longueur, rayon, seed, mat, segments = 4, courbure = 0.16) {
+  let p = origine.clone(), d = dir.clone().normalize();
+  for (let i = 0; i < segments; i++) {
+    const r0 = rayon * (1 - (i / segments) * 0.75);
+    const r1 = rayon * (1 - ((i + 1) / segments) * 0.75);
+    const l = longueur / segments;
+    // axe de rotation perpendiculaire à d, déterministe
+    const axe = new THREE.Vector3(d.z, 0, -d.x).normalize();
+    const angle = courbure * Math.sin(seed * 3.7 + i * 2.1);
+    d = d.clone().applyAxisAngle(axe, angle)
+      .applyAxisAngle(AXE, courbure * 0.6 * Math.cos(seed * 5.3 + i * 1.7))
+      .normalize();
+    const p1 = p.clone().addScaledVector(d, l);
+    segment(p, p1, r0, Math.max(r1, 0.015), mat);
+    p = p1;
+  }
+  return { bout: p, dir: d };
+}
+
+function repart(n, i, ecart) {
+  const a = (i / n) * Math.PI * 2 + Math.sin(i * 12.9898) * ecart;
+  return new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+}
+
+/* ------------------------------------------------- données → arbre */
+const infobulle = document.getElementById("infobulle");
+const panneau = document.getElementById("panneau");
+let feuilles = [];
+let deja = false;
+
+function textureFeuille(coulHex) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d");
+  // feuille pointue : deux béziers
+  const g = ctx.createRadialGradient(30, 26, 3, 32, 32, 28);
+  g.addColorStop(0, coulHex);
+  g.addColorStop(0.7, coulHex + "bb");
+  g.addColorStop(1, coulHex + "11");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(32, 5);
+  ctx.bezierCurveTo(55, 22, 50, 46, 32, 59);
+  ctx.bezierCurveTo(14, 46, 9, 22, 32, 5);
+  ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+
+function pendreFeuille(point, node, coul, taille, seed) {
+  const mat = new THREE.SpriteMaterial({
+    map: textureFeuille(coul), transparent: true, depthWrite: false });
+  mat.rotation = Math.sin(seed * 9.1) * 1.2;
+  const sp = new THREE.Sprite(mat);
+  sp.position.copy(point);
+  sp.scale.set(taille * 0.85, taille * 1.15, 1);
+  sp.userData = { node };
+  scene.add(sp);
+  feuilles.push(sp);
+}
+
+function bourgeonDormant(point) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0x8fa3b8, transparent: true, opacity: 0.3 }));
+  m.position.copy(point);
+  scene.add(m);
+}
+
+function courbe(a, b, coul, opacite, tirets = false) {
+  const milieu = a.clone().add(b).multiplyScalar(0.5)
+    .add(new THREE.Vector3(0, 1.2 + a.distanceTo(b) * 0.1, 0));
+  const courbe = new THREE.QuadraticBezierCurve3(a, milieu, b);
+  const geo = new THREE.BufferGeometry().setFromPoints(courbe.getPoints(40));
+  const mat = tirets
+    ? new THREE.LineDashedMaterial({ color: coul, transparent: true,
+        opacity: opacite, dashSize: 0.22, gapSize: 0.16 })
+    : new THREE.LineBasicMaterial({ color: coul, transparent: true, opacity: opacite });
+  const ligne = new THREE.Line(geo, mat);
+  if (tirets) ligne.computeLineDistances();
+  scene.add(ligne);
+}
+
+async function croitre() {
+  const d = await fetch("/api/graphe").then(r => r.json());
+  const noeuds = d.nodes;
+  const parDom = new Map();
+  for (const n of noeuds) {
+    const dom = n.domaines?.[0] || "autre";
+    if (!parDom.has(dom)) parDom.set(dom, []);
+    parDom.get(dom).push(n);
+  }
+  const doms = [...parDom.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  /* tronc : deux segments légèrement courbés */
+  const t1 = branche(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.05, 1, 0.03)
+    .normalize(), 2.6, 0.42, 0.7, BOIS, 3, 0.08);
+  const t2 = branche(t1.bout, new THREE.Vector3(0.1, 1, -0.05).normalize(),
+    2.4, 0.3, 2.3, BOIS, 3, 0.1);
+  const sommet = t2.bout;
+
+  doms.forEach(([dom, ns], i) => {
+    const radiale = repart(doms.length, i, 0.5);
+    /* départs échelonnés le long du haut du tronc */
+    const haut = i % 2 === 0 ? sommet : sommet.clone().lerp(t1.bout, 0.25);
+    const dir = radiale.clone().multiplyScalar(0.78)
+      .add(new THREE.Vector3(0, 0.75, 0)).normalize();
+    const longueur = 2.7 + Math.min(ns.length, 6) * 0.25;
+    const pr = branche(haut, dir, longueur, 0.19, i + 1, BOIS, 5, 0.14);
+    /* rameaux réels (les feuilles) + rameaux dormants (les bourgeons) */
+    const ancrages = [];
+    const nTiges = Math.max(1, Math.ceil(ns.length / 2));
+    for (let t = 0; t < nTiges; t++) {
+      const leLong = 0.3 + 0.55 * (t / Math.max(nTiges - 1, 1));
+      const depart = haut.clone().lerp(pr.bout, leLong);
+      const rd = repart(nTiges, t, 0.7).multiplyScalar(0.8);
+      const dir2 = dir.clone().multiplyScalar(0.4)
+        .add(rd).add(new THREE.Vector3(0, 0.45, 0)).normalize();
+      const pb = branche(depart, dir2, 1.6 + Math.sin(t * 7.3) * 0.5,
+                         0.085, i * 10 + t + 3, BOIS_TIP, 4, 0.2);
+      ancrages.push({ p: pb.bout.clone().addScaledVector(pb.dir, 0.4), s: i * 10 + t });
+      ancrages.push({ p: pb.bout, s: i * 10 + t + 1 });
+    }
+    /* deux rameaux dormants : le bois a de la réserve à pousser */
+    for (let r = 0; r < 2; r++) {
+      const leLong = 0.55 + 0.3 * r;
+      const depart = haut.clone().lerp(pr.bout, leLong);
+      const rd = repart(3, r + 1, 0.9).multiplyScalar(0.85);
+      const dir2 = dir.clone().multiplyScalar(0.35)
+        .add(rd).add(new THREE.Vector3(0, 0.3, 0)).normalize();
+      const pb = branche(depart, dir2, 1.1 + Math.sin((i + 2) * r * 4.1) * 0.3,
+                         0.06, i * 20 + r + 50, BOIS_TIP, 3, 0.24);
+      bourgeonDormant(pb.bout);
+    }
+    ns.forEach((n, k) => {
+      const ancr = ancrages[k % ancrages.length];
+      const point = ancr.p.clone().add(new THREE.Vector3(
+        Math.sin(k * 5.1 + ancr.s) * 0.22, 0.28 + Math.cos(k * 3.7 + ancr.s) * 0.18,
+        Math.cos(k * 5.1 + ancr.s) * 0.22));
+      const coul = n.fond || "#8fa3b8";
+      const taille = 0.8 + (n.size || 10) * 0.042;
+      pendreFeuille(point, n, coul, taille, k + ancr.s);
+    });
+  });
+
+  /* liens et greffes */
+  const pos = new Map(feuilles.map(sp => [sp.userData.node.id, sp.position]));
+  for (const e of d.edges) {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) continue;
+    const na = noeuds.find(n => n.id === e.from), nb = noeuds.find(n => n.id === e.to);
+    const memeBranche = na?.domaines?.[0] === nb?.domaines?.[0];
+    if (e.kind === "suggere")
+      courbe(a, b, 0xe8a13c, 0.5, true);
+    else if (memeBranche)
+      courbe(a, b, 0x8fa3b8, 0.2);
+    else
+      courbe(a, b, 0xffd54f, 0.42);
+  }
+  deja = true;
+}
+
+croitre().catch(e => {
+  document.body.innerHTML = `<div style="padding:60px;font-size:15px">
+    L'arbre a besoin du serveur : <code>python tools/archipel_serve.py</code> → <a href="/arbre" style="color:#ffd54f">/arbre</a><br><span style="color:#8fa3b8">${e.message}</span></div>`;
+});
+
+/* ------------------------------------------------- raycast */
+const ray = new THREE.Raycaster();
+const souris = new THREE.Vector2();
+let survol = null, selection = null;
+
+function pointer(e) {
+  souris.x = (e.clientX / innerWidth) * 2 - 1;
+  souris.y = -(e.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(souris, camera);
+  const hits = ray.intersectObjects(feuilles);
+  return hits.length ? hits[0].object : null;
+}
+addEventListener("pointermove", e => {
+  if (!deja) return;
+  const sp = pointer(e);
+  if (sp !== survol) {
+    if (survol && survol !== selection) survol.scale.multiplyScalar(1 / 1.25);
+    survol = sp;
+    if (survol && survol !== selection) survol.scale.multiplyScalar(1.25);
+  }
+  if (sp) {
+    const n = sp.userData.node;
+    infobulle.style.display = "block";
+    infobulle.style.left = (e.clientX + 14) + "px";
+    infobulle.style.top = (e.clientY + 10) + "px";
+    infobulle.innerHTML = `<b>${n.id.replace(/</g, "&lt;")}</b><br><span class="dom">${n.type} · ${(n.domaines || []).join(", ")}</span>`;
+    document.body.style.cursor = "pointer";
+  } else {
+    infobulle.style.display = "none";
+    document.body.style.cursor = "default";
+  }
+});
+addEventListener("click", async e => {
+  if (!deja) return;
+  const sp = pointer(e);
+  if (!sp) { panneau.classList.remove("ouvert"); selection = null; return; }
+  if (selection && selection !== sp) selection.scale.multiplyScalar(1 / 1.35);
+  selection = sp; selection.scale.multiplyScalar(1.35);
+  const n = sp.userData.node;
+  let corps = "", greffes = [];
+  try {
+    const f = await fetch(`/api/fiche?titre=${encodeURIComponent(n.id)}`).then(r => r.json());
+    corps = (f.corps || "").slice(0, 700);
+    greffes = [...(f.lie || []), ...(f.suggere || []).map(t => t + " (suggéré)")];
+  } catch (_) {}
+  document.getElementById("p-contenu").innerHTML = `
+    <span class="badge">${n.type}</span>${(n.domaines || []).map(dm =>
+      `<span class="badge">${dm}</span>`).join("")}
+    <h2>${n.id.replace(/</g, "&lt;")}</h2>
+    <div class="corps">${(corps || "…").replace(/</g, "&lt;")}</div>
+    ${greffes.length ? `<div class="greffes">pend aussi à :<br>${
+      greffes.map(g => `<span>${g.replace(/</g, "&lt;")}</span>`).join("")}</div>` : ""}`;
+  panneau.classList.add("ouvert");
+});
+document.getElementById("p-close").onclick = () => panneau.classList.remove("ouvert");
+
+/* ------------------------------------------------- boucle */
+function anim() {
+  requestAnimationFrame(anim);
+  if (tourne && deja) theta += 0.0012;
+  cam();
+  rendu.render(scene, camera);
+}
+anim();
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  rendu.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

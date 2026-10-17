@@ -45,6 +45,7 @@ ROOT = Path(__file__).resolve().parent.parent
 VAULT = ROOT / "myVault"
 FICHES = VAULT / "Fiches"
 UI = ROOT / "tools" / "archipel_ui.html"
+ARBRE = ROOT / "tools" / "arbre_3d.html"
 sys.path.insert(0, str(ROOT / "tools"))
 import graphe  # noqa: E402
 
@@ -744,6 +745,8 @@ class Handler(BaseHTTPRequestHandler):
         q1 = lambda k: urllib.parse.unquote(qs.get(k, [""])[0])
         if u.path == "/":
             self._fichier(UI, "text/html; charset=utf-8")
+        elif u.path == "/arbre":
+            self._fichier(ARBRE, "text/html; charset=utf-8")
         elif u.path == "/api/graphe":
             self._json(200, self._graphe_data())
         elif u.path == "/api/fiche":
